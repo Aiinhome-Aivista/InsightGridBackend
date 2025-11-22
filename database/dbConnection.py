@@ -1,28 +1,20 @@
 import os
-from sqlalchemy import create_engine
 from dotenv import load_dotenv
-
+import mysql.connector
 # ---------- Load Environment Variables ----------
 load_dotenv()
+# ---------- Database Configuration ----------
+MYSQL_CONFIG = {
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD", ""),
+    "host": os.getenv("DB_HOST"),
+    "port": int(os.getenv("DB_PORT")),  # default 3306 if not set
+    "database": os.getenv("DB_NAME")
+}
 
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
-
-# ---------- SQLAlchemy Connection String ---------
 def get_db_connection():
     try:
-        connection_string = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        engine = create_engine(connection_string)
-        
-        # Test connection
-        with engine.connect() as conn:
-            print(" Connected successfully!")
-        return engine
-
-    except Exception as e:
-        # print(" Connection failed. Check log file for details.")
-        print(f"Error details: {e}")
-
+        conn = mysql.connector.connect(**MYSQL_CONFIG)
+        return conn
+    except mysql.connector.Error as err:
+        raise Exception(f"Database connection error: {err}")
