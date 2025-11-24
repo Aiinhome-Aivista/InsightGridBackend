@@ -1,6 +1,8 @@
 from flask import Flask
 from flask_cors import CORS
+from controller.login import login_controller
 from controller.uploadFile import upload_files_controller 
+from controller.register import register_controller
 
 app = Flask(__name__)
 
@@ -14,6 +16,14 @@ def hello_world():
 @app.route("/upload_files",methods=["POST"])
 def upload_files():
     return upload_files_controller()
+
+@app.route("/register", methods=["POST"])
+def register():
+    return register_controller()
+
+@app.route("/login", methods=["POST"])
+def login():
+    return login_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
