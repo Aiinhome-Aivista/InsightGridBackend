@@ -1,11 +1,11 @@
-from flask import request, jsonify
+from flask import request
 from database.dbConnection import get_db_connection
+from utils.helper import build_response
 import bcrypt
 
 def register_controller():
     try:
-        data = request.get_json()
-
+        data = request.get_json(silent=True) or {}
         user_id = data.get("user_id")
         name = data.get("name")
         role_id = int(data.get("role_id"))
@@ -13,11 +13,7 @@ def register_controller():
         password = data.get("password")
 
         if not all([user_id, name, role_id, email, password]):
-            return jsonify({
-                "status": "failed",
-                "statusCode": 400,
-                "message": "All fields are required"
-            }), 400
+            return build_response(False, "All fields are required", 400, status="failed")
 
         # 🔥 BCRYPT HASH (this produces $2b$12$..... format)
         hashed_password = bcrypt.hashpw(
@@ -37,31 +33,22 @@ def register_controller():
         cursor.close()
         conn.close()
 
-        status = sp_result[0]
-        new_user_id = sp_result[1]
+        if not sp_result:
+            return build_response(False, "Registration failed", 500, status="error")
 
-        if status == "EMAIL_ALREADY_EXISTS":
-            return jsonify({
-                "isSuccess": False,
-                "status": "failed",
-                "statusCode": 400,
-                "message": "Email already exists"
-            }), 400
+        status_flag, new_user_id = sp_result
 
-        return jsonify({
-            "isSuccess": True,
-            "status": "success",
-            "statusCode": 200,
-            "message": "User registered successfully",
-            "new_user_id": new_user_id
-        }), 200
+        if status_flag == "EMAIL_ALREADY_EXISTS":
+            return build_response(False, "Email already exists", 400, status="failed")
+
+        return build_response(
+            True,
+            "User registered successfully",
+            200,
+            status="success",
+            extra={"new_user_id": new_user_id},
+        )
 
     except Exception as e:
         print("Error:", e)
-        return jsonify({
-            "isSuccess": False,
-            "status": "error",
-            "statusCode": 500,
-            "message": "Server error",
-            "error": str(e)
-        }), 500
+        return build_response(False, "Server error", 500, data={"error": str(e)}, status="error")

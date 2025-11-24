@@ -20,12 +20,16 @@ def allowed_file(filename):
     allowed = get_allowed_extensions()
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed
 
-def build_response(is_success, message, status_code, data=None):
+def build_response(is_success, message, status_code, data=None, status=None, extra=None):
     payload = {
         "isSuccess": is_success,
         "message": message,
         "statusCode": status_code,
     }
+    if status is not None:
+        payload["status"] = status
     if data is not None:
         payload["data"] = data
+    if extra:
+        payload.update(extra)
     return jsonify(payload), status_code
