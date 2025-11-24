@@ -3,69 +3,58 @@ from database.dbConnection import get_db_connection
 
 def get_file_data_controller():
     """
-    GET API to dynamically fetch file status columns from file_master table
-    Returns: All file metadata with status columns extracted dynamically
+    GET API to fetch all file metadata from file_master table
+    Returns: List of all files with their status metadata
     
-    Query Parameters:
-    - file_name (required): Name of the uploaded file
-    - session_id (optional): Session ID, default is '123456'
+    No parameters required - returns all files in the system
     
-    Example: /get_file_data?file_name=customers_orders_1&session_id=123456
+    Example: GET /get_file_data
     """
     try:
-        # Step 1: Get request parameters
-        file_name = request.args.get("file_name")
-        session_id = request.args.get("session_id", "123456")
-        
-        # Step 2: Validation
-        if not file_name:
-            return jsonify({
-                "status": "failed",
-                "statusCode": 400,
-                "message": "file_name is required",
-                "data": {}
-            }), 400
-
-        # Step 3: Connect to database
+        # Step 1: Connect to database
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Step 4: Call stored procedure to fetch file status dynamically
-        cursor.callproc('sp_get_file_status', (file_name, session_id))
-        
-        file_status_data = None
-        for result in cursor.stored_results():
-            file_status_data = result.fetchone()
+        # Step 2: Fetch all files from file_master table
+        query = """
+            SELECT * FROM file_master
+            ORDER BY updated_at DESC
+        """
+        cursor.execute(query)
+        all_files = cursor.fetchall()
         
         cursor.close()
         conn.close()
 
-        # Step 5: Check if file exists
-        if not file_status_data or file_status_data.get('status') == 'FILE_NOT_FOUND':
+        # Step 3: Check if any files exist
+        if not all_files or len(all_files) == 0:
             return jsonify({
-                "status": "failed",
-                "statusCode": 404,
-                "message": "File not found in file_master table",
-                "data": {}
-            }), 404
+                "status": "success",
+                "statusCode": 200,
+                "message": "No files found in the system",
+                "data": []
+            }), 200
 
-        # Step 6: Build flat response - all keys directly in data object
-        # Exclude only 'id' and 'status' fields
+        # Step 4: Process each file and build response
+        response_data = []
         exclude_fields = {'id', 'status'}
         
-        response_data = {}
-        for key, value in file_status_data.items():
-            if key not in exclude_fields:
-                # Convert datetime to string if needed
-                if key in ['created_at', 'updated_at']:
-                    response_data[key] = str(value) if value else ''
-                else:
-                    response_data[key] = value
+        for file_data in all_files:
+            file_info = {}
+            for key, value in file_data.items():
+                if key not in exclude_fields:
+                    # Convert datetime to string if needed
+                    if key in ['created_at', 'updated_at']:
+                        file_info[key] = str(value) if value else ''
+                    else:
+                        file_info[key] = value
+            
+            response_data.append(file_info)
 
         return jsonify({
             "status": "success",
             "statusCode": 200,
-            "message": "File status metadata retrieved successfully",
+            "message": f"Retrieved {len(response_data)} file(s) successfully",
             "data": response_data
         }), 200
 
@@ -73,7 +62,7 @@ def get_file_data_controller():
         return jsonify({
             "status": "error",
             "statusCode": 500,
-            "message": "Failed to retrieve file status",
+            "message": "Failed to retrieve file data",
             "error": str(e),
-            "data": {}
+            "data": []
         }), 500
