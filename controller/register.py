@@ -1,6 +1,6 @@
 from flask import request, jsonify
-from werkzeug.security import generate_password_hash
 from database.dbConnection import get_db_connection
+import bcrypt
 
 def register_controller():
     try:
@@ -19,31 +19,27 @@ def register_controller():
                 "message": "All fields are required"
             }), 400
 
-        hashed_password = generate_password_hash(password)
+        # 🔥 BCRYPT HASH (this produces $2b$12$..... format)
+        hashed_password = bcrypt.hashpw(
+            password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Run SP with CALL
         cursor.execute(
             "CALL register_procedure(%s, %s, %s, %s, %s)",
             (user_id, name, role_id, email, hashed_password)
         )
 
-        # Fetch SP SELECT result
         sp_result = cursor.fetchone()
         cursor.close()
         conn.close()
 
-        print("SP Result:", sp_result)  # debug
-        # Example:
-        # ('EMAIL_ALREADY_EXISTS', None)
-        # ('SUCCESS', 3)
-
         status = sp_result[0]
         new_user_id = sp_result[1]
 
-        # EMAIL ALREADY EXISTS → return 400
         if status == "EMAIL_ALREADY_EXISTS":
             return jsonify({
                 "isSuccess": False,
@@ -52,7 +48,6 @@ def register_controller():
                 "message": "Email already exists"
             }), 400
 
-        # SUCCESS → return 200
         return jsonify({
             "isSuccess": True,
             "status": "success",

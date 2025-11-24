@@ -1,6 +1,7 @@
-from flask import request, jsonify
-from werkzeug.security import check_password_hash
+from flask import request
+import bcrypt
 from database.dbConnection import get_db_connection
+from utils.helper import build_response
 
 def login_controller():
     data = request.get_json(silent=True) or {}
@@ -8,7 +9,7 @@ def login_controller():
     password = data.get("password") or ""
 
     if not email or not password:
-        return jsonify({"isSuccess": False, "message": "Email & password required","statusCode":400}), 400
+        return build_response(False, "Email & password required", 400)
 
     conn = None
     cursor = None
@@ -16,7 +17,6 @@ def login_controller():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
         cursor.callproc("sp_login_user", [email])
 
         user = None
@@ -25,25 +25,31 @@ def login_controller():
             break
 
         if not user:
-            return jsonify({"isSuccess": False, "message": "Invalid email or password","statusCode":401}), 401
+            return build_response(False, "Invalid email or password", 401)
 
         stored_hash = user.get("hashed_password")
-        if not stored_hash or not check_password_hash(stored_hash, password):
-            return jsonify({"isSuccess": False, "message": "Invalid email or password","statusCode":401}), 401
+        print("DB Hash:", stored_hash)
 
+        if not stored_hash:
+            return build_response(False, "Invalid email or password", 401)
+
+        # 🔥 bcrypt password check
+        is_valid = bcrypt.checkpw(
+            password.encode("utf-8"),
+            stored_hash.encode("utf-8")
+        )
+
+        if not is_valid:
+            return build_response(False, "Invalid email or password", 401)
+
+        # Remove hashed password from response
         user.pop("hashed_password", None)
 
-        return jsonify({
-            "isSuccess": True,
-            "message": "Login successful",
-            "data": user,
-            "statusCode":200
-            
-        })
+        return build_response(True, "Login successful", 200, user)
 
     except Exception as exc:
         print("Error:", exc)
-        return jsonify({"isSuccess": False, "message": "Server error","statusCode":500}), 500
+        return build_response(False, "Server error", 500)
 
     finally:
         if cursor:
