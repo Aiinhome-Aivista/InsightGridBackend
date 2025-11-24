@@ -33,7 +33,7 @@ def login_controller():
         if not stored_hash:
             return build_response(False, "Invalid email or password", 401)
 
-        # 🔥 bcrypt password check
+        # bcrypt password check
         is_valid = bcrypt.checkpw(
             password.encode("utf-8"),
             stored_hash.encode("utf-8")
