@@ -179,7 +179,6 @@
 #         }), 500
 
 
-
 import os
 import hashlib
 import pandas as pd
@@ -195,6 +194,7 @@ def upload_files_controller():
         # Step 0: Validate request
         errors = {}
         file_name = request.form.get("file_name")
+        print(file_name)
         files = request.files.getlist("files")
         session_id = request.form.get("session_id", "123456")
         created_by = request.form.get("created_by", "admin")
@@ -249,21 +249,25 @@ def upload_files_controller():
                 response_data.append(file_status)
                 continue
 
-            # Extract data and metadata
+            # Extract data and metadata (RAW INSERT ONLY)
             try:
                 total_rows = 0
                 total_columns = 0
-                file_json = {}
 
                 if ext == "csv":
                     df = pd.read_csv(file_path)
                     total_rows, total_columns = df.shape
                     total_sheets = 1
                     table_names = "sheet1"
-                    sheet_json = pd.Series({"data": {"sheet1": df.to_dict(orient="records")}}).to_json()
-                    
-                    # Insert single CSV sheet into file_data
-                    unique_hash = hashlib.md5((file_name_only + session_id).encode('utf-8')).hexdigest()
+
+                    sheet_json = pd.Series(
+                        {"data": {"sheet1": df.to_dict(orient="records")}}
+                    ).to_json()
+
+                    unique_hash = hashlib.md5(
+                        (file_name_only + session_id).encode('utf-8')
+                    ).hexdigest()
+
                     cursor.execute("""
                         INSERT INTO file_data (session_id, file_name, unique_id, row_data)
                         VALUES (%s,%s,%s,%s)
@@ -276,6 +280,7 @@ def upload_files_controller():
                 elif ext in ["xlsx", "xls"]:
                     engine = "openpyxl" if ext == "xlsx" else "xlrd"
                     all_sheets = pd.read_excel(file_path, sheet_name=None, engine=engine)
+
                     total_sheets = len(all_sheets)
                     table_names = ",".join(all_sheets.keys())
 
@@ -284,10 +289,14 @@ def upload_files_controller():
                         total_rows += sheet_rows
                         total_columns += sheet_cols
 
-                        sheet_json = pd.Series({"data": {sheet_name: sheet_df.to_dict(orient="records")}}).to_json()
-                        unique_hash = hashlib.md5((file_name_only + sheet_name + session_id).encode('utf-8')).hexdigest()
+                        sheet_json = pd.Series(
+                            {"data": {sheet_name: sheet_df.to_dict(orient="records")}}
+                        ).to_json()
 
-                        # Insert sheet-wise JSON
+                        unique_hash = hashlib.md5(
+                            (file_name_only + sheet_name + session_id).encode('utf-8')
+                        ).hexdigest()
+
                         cursor.execute("""
                             INSERT INTO file_data (session_id, file_name, unique_id, row_data)
                             VALUES (%s,%s,%s,%s)
@@ -297,8 +306,7 @@ def upload_files_controller():
                         """, (session_id, file_name_only, unique_hash, sheet_json))
                         conn.commit()
 
-                # Mark all status as done
-                table_extract_status = column_extract_status = data_mapping_status = upload_status = "done"
+                table_extract_status = column_extract_status = data_mapping_status = "done"
 
             except Exception as e:
                 file_status.update({
@@ -309,54 +317,9 @@ def upload_files_controller():
                 response_data.append(file_status)
                 continue
 
+            # ➤ CLEANING BLOCK REMOVED COMPLETELY
 
-
-            # ---- CLEANED DATA INSERT AFTER RAW INSERT ----
-            try:
-                # For CSV
-                if ext == "csv":
-                    cleaned_df = df.copy()
-                    cleaned_df.dropna(how="all", inplace=True)
-                    cleaned_df.drop_duplicates(inplace=True)
-                    cleaned_df = cleaned_df.apply(pd.to_numeric, errors='ignore')
-
-                    clean_rows, clean_cols = cleaned_df.shape
-                    sheet_name = "sheet1"
-                    cleaned_json = pd.Series({"data": {sheet_name: cleaned_df.to_dict(orient="records")}}).to_json()
-                    clean_unique_hash = hashlib.md5((file_name_only + sheet_name + session_id + "_clean").encode('utf-8')).hexdigest()
-
-                    cursor.execute("""
-                        INSERT INTO file_data_cleaned
-                            (session_id, file_name, sheet_name, unique_id, cleaned_rows, cleaned_columns, row_data)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
-                    """, (session_id, file_name_only, sheet_name, clean_unique_hash, clean_rows, clean_cols, cleaned_json))
-                    conn.commit()
-
-                # For Excel
-                elif ext in ["xlsx", "xls"]:
-                    for sheet_name, sheet_df in all_sheets.items():
-                        cleaned_df = sheet_df.copy()
-                        cleaned_df.dropna(how="all", inplace=True)
-                        cleaned_df.drop_duplicates(inplace=True)
-                        cleaned_df = cleaned_df.apply(pd.to_numeric, errors='ignore')
-
-                        clean_rows, clean_cols = cleaned_df.shape
-                        cleaned_json = pd.Series({"data": {sheet_name: cleaned_df.to_dict(orient="records")}}).to_json()
-                        clean_unique_hash = hashlib.md5((file_name_only + sheet_name + session_id + "_clean").encode('utf-8')).hexdigest()
-
-                        cursor.execute("""
-                            INSERT INTO file_data_cleaned
-                                (session_id, file_name, sheet_name, unique_id, cleaned_rows, cleaned_columns, row_data)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s)
-                        """, (session_id, file_name_only, sheet_name, clean_unique_hash, clean_rows, clean_cols, cleaned_json))
-                        conn.commit()
-
-            except Exception as e:
-                print("Cleaned data insert error:", str(e))
-
-
-
-            # Insert metadata into file_master
+            # Insert metadata
             cursor.execute("""
                 INSERT INTO file_master
                     (file_name, file_type, upload_status, table_extract_status,
@@ -391,7 +354,7 @@ def upload_files_controller():
         cursor.close()
         conn.close()
 
-        # Final response
+        # Return final response
         if all("errors" not in f for f in response_data):
             return jsonify({
                 "status": "success",
@@ -415,4 +378,3 @@ def upload_files_controller():
             "error": str(e),
             "data": []
         }), 500
-
