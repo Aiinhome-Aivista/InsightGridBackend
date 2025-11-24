@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from controller.uploadFile import upload_files_controller 
+from controller.process_file_controller import process_file_controller
 
 app = Flask(__name__)
 
@@ -14,6 +15,11 @@ def hello_world():
 @app.route("/upload_files",methods=["POST"])
 def upload_files():
     return upload_files_controller()
+
+@app.route("/process_file", methods=["POST"])
+def run_process_file():
+    return process_file_controller()
+
 
 # Run the Flask Server
 if __name__ == "__main__":
