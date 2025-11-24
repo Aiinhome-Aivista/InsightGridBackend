@@ -35,14 +35,12 @@ def login():
 @app.route("/get_file_data", methods=["GET"])
 def get_file_data():
     """
-    GET API: Fetch file metadata and analyze structure
-    Extracts: Tables -> Columns -> Data Mapping
+    GET API: Fetch all file metadata from file_master table
+    Returns list of all uploaded files with their status
     
-    Query Parameters:
-    - file_name (required): Name of the uploaded file
-    - session_id (optional): Session ID, default is '123456'
+    No parameters required
     
-    Example: /get_file_data?file_name=SalesData&session_id=123456
+    Example: GET /get_file_data
     """
     return get_file_data_controller()
 
