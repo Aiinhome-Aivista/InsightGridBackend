@@ -15,7 +15,7 @@ def register_controller():
         if not all([user_id, name, role_id, email, password]):
             return build_response(False, "All fields are required", 400, status="failed")
 
-        # 🔥 BCRYPT HASH (this produces $2b$12$..... format)
+        # BCRYPT HASH 
         hashed_password = bcrypt.hashpw(
             password.encode('utf-8'),
             bcrypt.gensalt()
