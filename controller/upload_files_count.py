@@ -1,98 +1,3 @@
-# import os
-# import pandas as pd
-# from flask import request, jsonify
-# from helper.helperFunctions import build_response, get_allowed_extensions
-
-
-# def upload_files_count_controller():
-#     try:
-#         session_id = request.form.get("session_id")
-#         file_name = request.form.get("file_name")
-#         files = request.files.getlist("files")
-
-#         if not session_id:
-#             return build_response(False, "Session id is required", 400)
-        
-#         if not file_name:
-#             return build_response(False, "File name is required", 400)
-        
-#         if "files" not in request.files:
-#             return build_response(False, "No files uploaded", 400)
-        
-
-
-#         file_names = []
-#         columns_summary = {}
-
-#          # Get allowed extensions dynamically from .env
-#         allowed_ext = get_allowed_extensions()
-
-#         for file in files:
-#             file_name = file.filename
-#             ext = file_name.rsplit(".", 1)[-1].lower()
-#             file_names.append(file_name)
-
-#             #  Unsupported extension
-#             if ext not in allowed_ext:
-#                 columns_summary[file_name] = "Unsupported file type"
-#                 continue
-
-#             # -----------------------------------------
-#             #        FILE TYPE HANDLING BELOW
-#             # -----------------------------------------
-
-#             #  Excel
-#             if ext in ("xlsx", "xls"):
-#                 try:
-#                     excel_file = pd.ExcelFile(file)
-#                     sheet_summary = {}
-
-#                     for sheet in excel_file.sheet_names:
-#                         df = excel_file.parse(sheet)
-#                         sheet_summary[sheet] = len(df.columns)
-
-#                     columns_summary[file_name] = sheet_summary
-
-#                 except Exception as e:
-#                     columns_summary[file_name] = f"Error reading Excel: {str(e)}"
-
-
-#             #  CSV
-#             elif ext == "csv":
-#                 try:
-#                     df = pd.read_csv(file)
-#                     columns_summary[file_name] = len(df.columns)
-#                 except Exception as e:
-#                     columns_summary[file_name] = f"Error reading CSV: {str(e)}"
-
-#             #  XML
-#             elif ext == "xml":
-#                 try:
-#                     df = pd.read_xml(file)
-#                     columns_summary[file_name] = len(df.columns)
-#                 except Exception as e:
-#                     columns_summary[file_name] = f"Error reading XML: {str(e)}"
-
-#             #  SQL & DUMP — cannot extract columns directly
-#             elif ext in ("sql", "dump"):
-#                 # These are usually raw SQL dumps — handle accordingly
-#                 columns_summary[file_name] = "SQL/DUMP file – column extraction not applicable"
-
-#         return build_response(
-#             True,
-#             "File columns processed successfully",
-#             200,
-#             data={
-#                 "files": file_names,
-#                 "column_summary": columns_summary
-#             }
-#         )
-
-#     except Exception as e:
-#         return build_response(False, f"Error: {str(e)}", 500)
-
-
-
 import pandas as pd
 import json
 import uuid
@@ -114,7 +19,7 @@ def chunk_list(data, chunk_size=1000):
 def upload_files_count_controller():
     try:
         session_id = request.form.get("session_id")
-        file_name = request.form.get("file_name")
+        session_name = request.form.get("session_name")
         files = request.files.getlist("files")
 
         created_by = "Admin"   # backend generated
@@ -132,11 +37,16 @@ def upload_files_count_controller():
 
             file_name = file.filename
             ext = file_name.rsplit(".", 1)[-1].lower()
+             # ========= FILE SIZE (in bytes) =========
+            file.seek(0, 2)              # move pointer to end
+            file_size = file.tell()      # actual size in bytes
+            file.seek(0)                 # reset pointer for pandas
 
             result = {
                 "file name": file_name,
                 "file type": ext,
                 "total files": len(files),
+                "file size": file_size,
                 "upload_status": "Pending",
                 "table_extract_status": "Pending",
                 "column_extract_status": "Pending",
@@ -288,7 +198,8 @@ def upload_files_count_controller():
                         result["table name"],
                         result["total sheets"],
                         created_by,
-                        json.dumps([chunk])  # single-chunk JSON array
+                        json.dumps([chunk]),  # single-chunk JSON array
+                        file_size                  
                     ))
 
                 conn.commit()
