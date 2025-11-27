@@ -391,7 +391,7 @@ def upload_files_count_controller():
                     result["total column"] = 0
                     total_rows = 0
 
-                    result["upload_status"] = "Done"
+                    # result["upload_status"] = "Done"
 
             except Exception as e:
                 result["upload_status"] = "Failed"
