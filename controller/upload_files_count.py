@@ -3,7 +3,7 @@ import json
 import uuid
 from flask import request
 from database.dbConnection import get_db_connection
-from helper.helperFunctions import build_response, get_allowed_extensions
+from helper.helperFunctions import build_response, get_allowed_extensions,format_file_size
 
 
 def generate_unique_id():
@@ -22,14 +22,17 @@ def upload_files_count_controller():
         session_name = request.form.get("session_name")
         files = request.files.getlist("files")
 
-        created_by = "Admin"   # backend generated
+        created_by = "system"   # backend generated
 
-        if not session_id:
-            return build_response(False, "session_id is required", 400)
+        if not session_id or session_id.strip() == "":
+           return build_response(False, "Session id is required", 400)
+        
+        if not session_name or session_name.strip() == "":
+            return build_response(False, "Session name is required", 400)
 
         if not files:
             return build_response(False, "No files uploaded", 400)
-
+        
         allowed_ext = get_allowed_extensions()
         final_response = []
 
@@ -37,16 +40,18 @@ def upload_files_count_controller():
 
             file_name = file.filename
             ext = file_name.rsplit(".", 1)[-1].lower()
-             # ========= FILE SIZE (in bytes) =========
-            file.seek(0, 2)              # move pointer to end
-            file_size = file.tell()      # actual size in bytes
-            file.seek(0)                 # reset pointer for pandas
+
+        # --------- ADD THIS ---------
+            file_size_bytes = len(file.read())   # get size in bytes
+            file.seek(0)                         # reset pointer for pandas to read
+            file_size_str = format_file_size(file_size_bytes)
+            # ----------------------------
+
 
             result = {
                 "file name": file_name,
                 "file type": ext,
                 "total files": len(files),
-                "file size": file_size,
                 "upload_status": "Pending",
                 "table_extract_status": "Pending",
                 "column_extract_status": "Pending",
@@ -177,16 +182,26 @@ def upload_files_count_controller():
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
+                print(len((
+                        session_id, session_name, file_name, ext,
+                        result["upload_status"], result["table_extract_status"],
+                        result["column_extract_status"], result["data_mapping_status"],
+                        total_rows, result["total column"],
+                        result["table name"], result["total sheets"],
+                        created_by, json.dumps([chunk])
+                    )))
+
 
                 for chunk in file_data_chunks:
 
                     cursor.execute("""
                         CALL sp_upload_file_count(
                             %s,%s,%s,%s,%s,%s,%s,
-                            %s,%s,%s,%s,%s,%s
+                            %s,%s,%s,%s,%s,%s,%s,%s
                         )
                     """, (
                         session_id,
+                        session_name,
                         file_name,
                         ext,
                         result["upload_status"],
@@ -198,10 +213,9 @@ def upload_files_count_controller():
                         result["table name"],
                         result["total sheets"],
                         created_by,
-                        json.dumps([chunk]),  # single-chunk JSON array
-                        file_size                  
+                        file_size_str,
+                        json.dumps([chunk])  # single-chunk JSON array
                     ))
-
                 conn.commit()
                 cursor.close()
                 conn.close()
@@ -216,4 +230,3 @@ def upload_files_count_controller():
 
     except Exception as e:
         return build_response(False, f"Error: {str(e)}", 500)
-
