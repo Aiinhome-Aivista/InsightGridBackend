@@ -237,72 +237,66 @@ from helper.helperFunctions import (
 
 def upload_files_count_controller():
     try:
-        # ---------------------- VALIDATION BLOCK ---------------------- #
+        # ---------------------- MAIN INPUTS ---------------------- #
         session_id = request.form.get("session_id")
         session_name = request.form.get("session_name")
         files = request.files.getlist("files")
         created_by = "system"
 
-        required_messages = {
-            "session_id": "Session id is required",
-            "session_name": "Session name is required",
-            "files": "At least 1 file is required"
-        }
+        # Basic validation (session_id & session_name only)
+        if not session_id or not session_name:
+            return build_response(False, "Session ID & Session Name are required", 400)
 
-        errors = []
-
-        # CASE 1: All missing
-        if (not session_id and not session_name and (not files or len(files) == 0)):
-            all_errors = ", ".join(required_messages.values())
-            return build_response(False, all_errors, 400)
-
-        # CASE 2: Individual validation
-        if not session_id or session_id.strip() == "":
-            errors.append(required_messages["session_id"])
-
-        if not session_name or session_name.strip() == "":
-            errors.append(required_messages["session_name"])
-
-        if not files or len(files) == 0:
-            errors.append(required_messages["files"])
-
-        # If any validation failed
-        if errors:
-            return build_response(False, ", ".join(errors), 400)
-
-        # ------------------ END VALIDATION BLOCK ---------------------- #
-
+        # Allowed extensions from .env
         allowed_ext = get_allowed_extensions()
         final_response = []
 
         # ---------------------- PROCESS EACH FILE ---------------------- #
         for file in files:
 
+            # 🛑 Skip empty file object
+            if file.filename == "" or file.filename is None:
+                final_response.append({
+                    "file name": "",
+                    "file type": "",
+                    "upload_status": "Pending",
+                    "table_extract_status": "Pending",
+                    "column_extract_status": "Pending",
+                    "data_mapping_status": "Pending",
+                    "relation_mapping_status": "Pending",
+                    "total sheets": 0,
+                    "total column": 0,
+                    "table name": "",
+                    "error": "Empty file received"
+                })
+                continue
+
             file_name = file.filename
             ext = file_name.rsplit(".", 1)[-1].lower()
 
-            # Calculate file size
+            # File size calculation
             file_size_bytes = len(file.read())
             file.seek(0)
             file_size_str = format_file_size(file_size_bytes)
 
+            # Default response object for this file
             result = {
                 "file name": file_name,
                 "file type": ext,
-                "total files": len(files),
                 "upload_status": "Pending",
                 "table_extract_status": "Pending",
                 "column_extract_status": "Pending",
                 "data_mapping_status": "Pending",
                 "relation_mapping_status": "Pending",
+                "total files": len(files),
                 "total sheets": 0,
                 "total column": 0,
                 "table name": ""
             }
 
-            # Extension validation
+            # 🛑 Invalid extension → mark failed (but overall API OK)
             if ext not in allowed_ext:
-                result["upload_status"] = "Failed"
+                result["error"] = f"Extension .{ext} is not allowed"
                 final_response.append(result)
                 continue
 
@@ -311,7 +305,7 @@ def upload_files_count_controller():
 
             # ------------------- FILE TYPE PROCESSING ------------------- #
             try:
-                # 1) Excel
+                # Excel
                 if ext in ("xlsx", "xls"):
                     excel = pd.ExcelFile(file)
                     sheets = excel.sheet_names
@@ -328,74 +322,60 @@ def upload_files_count_controller():
                         total_rows += len(df)
                         total_columns += len(df.columns)
 
-                        for index, chunk in enumerate(chunk_list(rows, chunk_size=1000)):
+                        for index, chunk in enumerate(chunk_list(rows, 1000)):
                             file_data_chunks.append({
                                 "unique_id": f"{generate_unique_id()}_{sheet}_{index}",
                                 "row_data": {"data": {sheet: chunk}}
                             })
 
                     result["total column"] = total_columns
-                    result["upload_status"] = "Done"
-                    result["table_extract_status"] = "Done"
-                    result["column_extract_status"] = "Done"
 
-                # 2) CSV
+                # CSV
                 elif ext == "csv":
                     df = pd.read_csv(file)
                     rows = json.loads(df.to_json(orient="records"))
-
                     total_rows = len(df)
+
                     result["total sheets"] = 1
                     result["table name"] = "Sheet1"
                     result["total column"] = len(df.columns)
 
-                    for index, chunk in enumerate(chunk_list(rows, chunk_size=1000)):
+                    for index, chunk in enumerate(chunk_list(rows, 1000)):
                         file_data_chunks.append({
                             "unique_id": f"{generate_unique_id()}_Sheet1_{index}",
                             "row_data": {"data": {"Sheet1": chunk}}
                         })
 
-                    result["upload_status"] = "Done"
-                    result["table_extract_status"] = "Done"
-                    result["column_extract_status"] = "Done"
-
-                # 3) XML
+                # XML
                 elif ext == "xml":
                     df = pd.read_xml(file)
                     rows = json.loads(df.to_json(orient="records"))
-
                     total_rows = len(df)
+
                     result["total sheets"] = 1
                     result["table name"] = "XMLData"
                     result["total column"] = len(df.columns)
 
-                    for index, chunk in enumerate(chunk_list(rows, chunk_size=1000)):
+                    for index, chunk in enumerate(chunk_list(rows, 1000)):
                         file_data_chunks.append({
                             "unique_id": f"{generate_unique_id()}_XMLData_{index}",
                             "row_data": {"data": {"XMLData": chunk}}
                         })
 
-                    result["upload_status"] = "Done"
-                    result["table_extract_status"] = "Done"
-                    result["column_extract_status"] = "Done"
-
-                # 4) SQL Dump
+                # SQL Dump
                 elif ext in ("sql", "dump"):
                     file_data_chunks.append({
                         "unique_id": generate_unique_id(),
                         "row_data": {"data": {}}
                     })
 
-                    result["table name"] = "N/A"
                     result["total sheets"] = 0
                     result["total column"] = 0
-                    total_rows = 0
-
-                    # result["upload_status"] = "Done"
+                    result["table name"] = "N/A"
 
             except Exception as e:
-                result["upload_status"] = "Failed"
-                result["error"] = str(e)
+                # Mark only this file as failed
+                result["error"] = f"Processing error: {str(e)}"
                 final_response.append(result)
                 continue
 
@@ -415,7 +395,7 @@ def upload_files_count_controller():
                         session_name,
                         file_name,
                         ext,
-                        result["upload_status"],
+                        result["upload_status"],        # ALWAYS PENDING
                         result["table_extract_status"],
                         result["column_extract_status"],
                         result["data_mapping_status"],
@@ -433,19 +413,13 @@ def upload_files_count_controller():
                 conn.close()
 
             except Exception as db_error:
-                result["upload_status"] = "Failed"
-                result["error"] = str(db_error)
+                result["error"] = f"Database error: {str(db_error)}"
 
             final_response.append(result)
 
-        # ------------------ FINAL API STATUS HANDLING ------------------ #
-
-        any_failed = any(item.get("upload_status") == "Failed" for item in final_response)
-
-        if any_failed:
-            return build_response(False, "One or more files failed to upload", 400, data=final_response)
-
+        # ------------------ ALWAYS RETURN 200 ------------------ #
         return build_response(True, "Upload completed", 200, data=final_response)
 
     except Exception as e:
-        return build_response(False, f"Error: {str(e)}", 500)
+        return build_response(False, f"Unexpected Error: {str(e)}", 500)
+
