@@ -54,4 +54,15 @@ def format_file_size(size_bytes):
     return f"{size_bytes:.2f} {size_name[i]}"
 
 
+def generate_unique_id():
+    return uuid.uuid4().hex
+
+
+def chunk_list(data, chunk_size=1000):
+    """Yield chunks of list."""
+    for i in range(0, len(data), chunk_size):
+        yield data[i:i + chunk_size]
+
+
+
 
