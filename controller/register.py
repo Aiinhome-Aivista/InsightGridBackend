@@ -25,7 +25,7 @@ def register_controller():
         cursor = conn.cursor()
 
         cursor.execute(
-            "CALL register_procedure(%s, %s, %s, %s, %s)",
+            "CALL sp_register_procedure(%s, %s, %s, %s, %s)",
             (user_id, name, role_id, email, hashed_password)
         )
 
