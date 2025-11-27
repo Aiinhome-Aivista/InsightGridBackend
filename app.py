@@ -5,7 +5,7 @@ from controller.register import register_controller
 from controller.login import login_controller
 from controller.get_tracker import get_tracker_controller
 from controller.upload_files_count import upload_files_count_controller
-
+from controller.process_session_data import process_session_data_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -30,6 +30,11 @@ def tracker_route():
 @app.route("/upload_files_count", methods=["POST"])
 def upload_files_count_route():
     return upload_files_count_controller()
+
+@app.route("/process_session_data", methods=["POST"])
+def process_session_data_route():
+    return process_session_data_controller()
+
 
 # Run the Flask Server
 if __name__ == "__main__":
