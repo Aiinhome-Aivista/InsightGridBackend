@@ -5,17 +5,17 @@ from helper.helperFunctions import build_response
 import json
 import numpy as np
 import re
-
-def call_llm(prompt):
-    """
-    Dummy LLM caller — replace with OpenAI / Gemini / Azure later.
-    Must ALWAYS return JSON string.
-    """
-    response = {
-        "contextual_summary": "Short meaning of this column based on values.",
-        "technical_summary": "Technical description such as datatype and structure."
-    }
-    return json.dumps(response)
+from model.llm_client import call_llm 
+# def call_llm(prompt):
+#     """
+#     Dummy LLM caller — replace with OpenAI / Gemini / Azure later.
+#     Must ALWAYS return JSON string.
+#     """
+#     response = {
+#         "contextual_summary": "Short meaning of this column based on values.",
+#         "technical_summary": "Technical description such as datatype and structure."
+#     }
+#     return json.dumps(response)
 
 
 
@@ -211,18 +211,8 @@ def infer_type_from_values(values):
 # 2. Build Column Store With AI Descriptions
 # -------------------------------------------------------------
 def build_column_store(df, call_llm):
-    """
-    Creates a complete column schema using:
-    - AI type inference
-    - AI contextual summary
-    - AI technical summary
-    Skips 'sheet_name' and 'file_name' columns.
-    """
-
     column_store = []
     col_id = 1
-
-    # Columns to skip
     skip_cols = {"sheet_name", "file_name"}
 
     for col in df.columns:
@@ -232,38 +222,47 @@ def build_column_store(df, call_llm):
         sample_vals = df[col].head(50).tolist()
         detected_type = infer_type_from_values(sample_vals)
 
-        # AI prompt
         prompt = f"""
 You are a data analyst. 
 Given this column name and sample values, write:
 1) short contextual meaning (1 line)
 2) short technical description (1 line)
-Return as JSON:
+Return ONLY as JSON like this:
+
+{{
+  "contextual_meaning": "...",
+  "technical_description": "..."
+}}
 
 column_name: {col}
 sample_values: {sample_vals[:5]}
 detected_type: {detected_type}
 """
 
+        # Call LLM safely
         try:
             ai_text = call_llm(prompt)
-        except:
-            ai_text = "{}"
+        except Exception as e:
+            ai_text = f'{{"contextual_meaning": "[LLM Error] {str(e)}", "technical_description": ""}}'
 
+        # Remove code fences if any
+        ai_text = re.sub(r"```json|```", "", ai_text, flags=re.IGNORECASE).strip()
+
+        # Parse JSON safely
         try:
             ai_json = json.loads(ai_text)
+            contextual = ai_json.get("contextual_meaning", "")
+            technical = ai_json.get("technical_description", "")
         except:
-            ai_json = {
-                "contextual_summary": "",
-                "technical_summary": ""
-            }
+            contextual = ai_text
+            technical = ""
 
         column_store.append({
             "column_id": col_id,
             "column_name": col,
             "column_type": detected_type,
-            "contextual_summary": ai_json.get("contextual_summary", ""),
-            "technical_summary": ai_json.get("technical_summary", "")
+            "contextual_summary": contextual,
+            "technical_summary": technical
         })
 
         col_id += 1

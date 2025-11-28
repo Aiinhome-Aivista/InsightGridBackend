@@ -1,7 +1,18 @@
 import requests
 import json 
 import google.generativeai as genai
-from database.config import ACTIVE_LLM, GEMINI_API_KEY, MODEL_NAME, MISTRAL_API_KEY, MISTRAL_API_URL
+import os
+from dotenv import load_dotenv
+# ---------- Load environment variables ----------
+load_dotenv()  # loads variables from .env file
+
+# ---------- LLM Configuration ----------
+ACTIVE_LLM = os.getenv("ACTIVE_LLM", "gemini")              # "gemini", "mistral_cloud", "mistral_local"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1")            # for Gemini
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+MISTRAL_API_URL = os.getenv("MISTRAL_API_URL", "http://localhost:11434/api/generate")  # local Ollama
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")  # cloud or local model
 
 
 def call_llm(prompt: str) -> str:
