@@ -291,7 +291,8 @@ def upload_files_count_controller():
                 "total files": len(files),
                 "total sheets": 0,
                 "total column": 0,
-                "table name": ""
+                "table name": "",
+                "column_names": {}   # new field to store sheet-wise column names
             }
 
             # 🛑 Invalid extension → mark failed (but overall API OK)
@@ -321,7 +322,11 @@ def upload_files_count_controller():
 
                         total_rows += len(df)
                         total_columns += len(df.columns)
-
+                         # Store column names for this sheet
+                        result["column_names"][sheet] = list(df.columns)
+                        result["column_extract_status"] = "Done"
+                        result["table_extract_status"] = "Done"
+                                       
                         for index, chunk in enumerate(chunk_list(rows, 1000)):
                             file_data_chunks.append({
                                 "unique_id": f"{generate_unique_id()}_{sheet}_{index}",
@@ -339,6 +344,9 @@ def upload_files_count_controller():
                     result["total sheets"] = 1
                     result["table name"] = "Sheet1"
                     result["total column"] = len(df.columns)
+                    result["column_names"]["Sheet1"] = list(df.columns)  
+                    result["column_extract_status"] = "Done"
+                    result["table_extract_status"] = "Done"
 
                     for index, chunk in enumerate(chunk_list(rows, 1000)):
                         file_data_chunks.append({
@@ -355,6 +363,9 @@ def upload_files_count_controller():
                     result["total sheets"] = 1
                     result["table name"] = "XMLData"
                     result["total column"] = len(df.columns)
+                    result["column_names"]["XMLData"] = list(df.columns)   # store column names
+                    result["column_extract_status"] = "Done"
+                    result["table_extract_status"] = "Done"
 
                     for index, chunk in enumerate(chunk_list(rows, 1000)):
                         file_data_chunks.append({
@@ -388,7 +399,7 @@ def upload_files_count_controller():
                     cursor.execute("""
                         CALL sp_upload_file_count(
                             %s,%s,%s,%s,%s,%s,%s,
-                            %s,%s,%s,%s,%s,%s,%s,%s
+                            %s,%s,%s,%s,%s,%s,%s,%s,%s
                         )
                     """, (
                         session_id,
@@ -405,7 +416,8 @@ def upload_files_count_controller():
                         result["total sheets"],
                         created_by,
                         file_size_str,
-                        json.dumps([chunk])
+                        json.dumps(result["column_names"]),
+                        json.dumps([chunk]),
                     ))
 
                 conn.commit()
