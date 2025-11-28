@@ -341,17 +341,19 @@ def upload_files_count_controller():
                     rows = json.loads(df.to_json(orient="records"))
                     total_rows = len(df)
 
+                    # Use CSV file name (without extension) as sheet/table name
+                    sheet_name = file_name.rsplit(".", 1)[0]
                     result["total sheets"] = 1
-                    result["table name"] = "Sheet1"
+                    result["table name"] = sheet_name
                     result["total column"] = len(df.columns)
-                    result["column_names"]["Sheet1"] = list(df.columns)  
+                    result["column_names"][sheet_name] = list(df.columns)  
                     result["column_extract_status"] = "Done"
                     result["table_extract_status"] = "Done"
 
                     for index, chunk in enumerate(chunk_list(rows, 1000)):
                         file_data_chunks.append({
-                            "unique_id": f"{generate_unique_id()}_Sheet1_{index}",
-                            "row_data": {"data": {"Sheet1": chunk}}
+                            "unique_id": f"{generate_unique_id()}_{sheet_name}_{index}",
+                            "row_data": {"data": {sheet_name: chunk}}
                         })
 
                 # XML

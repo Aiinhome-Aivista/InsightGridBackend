@@ -6,18 +6,6 @@ import json
 import numpy as np
 import re
 from model.llm_client import call_llm 
-# def call_llm(prompt):
-#     """
-#     Dummy LLM caller — replace with OpenAI / Gemini / Azure later.
-#     Must ALWAYS return JSON string.
-#     """
-#     response = {
-#         "contextual_summary": "Short meaning of this column based on values.",
-#         "technical_summary": "Technical description such as datatype and structure."
-#     }
-#     return json.dumps(response)
-
-
 
 # -----------------------------
 # Helper: Fetch raw data from DB
@@ -48,101 +36,192 @@ def fetch_raw_data(session_id, session_name):
 # -----------------------------
 # Helper: Clean raw data
 # -----------------------------
+# def clean_data(raw_data):
+#     """
+#     Clean file_data returned from DB.
+#     - Extract nested row_data JSON correctly
+#     - Handle multiple sheets
+#     - Remove technical metadata columns
+#     - Clean values
+#     """
+
+#     if not raw_data:
+#         return pd.DataFrame()
+
+#     extracted_rows = []
+
+#     for row in raw_data:
+#         # row_data is string → convert to dict
+#         row_json = row.get("row_data")
+
+#         if not row_json:
+#             continue
+
+#         # If row_data is a stringified JSON – decode it
+#         if isinstance(row_json, str):
+#             try:
+#                 row_json = json.loads(row_json)
+#             except:
+#                 continue
+
+#         # row_json expected structure:
+#         # {"data": { "Sheet1": [ {..}, {..} ] }}
+#         if "data" in row_json:
+#             sheets = row_json["data"]
+
+#             # Extract rows from each sheet
+#             for sheet_name, sheet_rows in sheets.items():
+#                 if isinstance(sheet_rows, list):
+#                     for r in sheet_rows:
+#                         # Add sheet tag and technical info if required
+#                         rec = {
+#                             **r,
+#                             "sheet_name": sheet_name,
+#                             "file_name": row.get("file_name")
+#                         }
+#                         extracted_rows.append(rec)
+
+#     if not extracted_rows:
+#         return pd.DataFrame()
+
+#     df = pd.DataFrame(extracted_rows)
+
+#     # Remove technical system columns
+#     drop_cols = ["unique_id", "session_id", "session_name"]
+#     df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
+
+#     # ---------------------
+#     # BASIC CLEANING
+#     # ---------------------
+#     df = df.drop_duplicates().copy()
+
+#     # Fill missing
+#     for col in df.columns:
+#         if df[col].dtype == object:
+#             df[col] = df[col].fillna("Unknown")
+#         else:
+#             df[col] = df[col].fillna(0)
+
+#     # String trim
+#     for col in df.select_dtypes(include='object').columns:
+#         df[col] = df[col].astype(str).str.strip().str.replace(r'\s+', ' ', regex=True)
+
+#     # Convert date-like columns
+#     for col in df.columns:
+#         if 'date' in col.lower():
+#             df[col] = pd.to_datetime(df[col], errors='ignore')
+
+#     # Outlier handling (numeric)
+#     numeric_cols = df.select_dtypes(include=np.number).columns
+#     for col in numeric_cols:
+#         Q1 = df[col].quantile(0.25)
+#         Q3 = df[col].quantile(0.75)
+#         IQR = Q3 - Q1
+#         df[col] = df[col].clip(Q1 - 1.5 * IQR, Q3 + 1.5 * IQR)
+
+#     # Rare category handling
+#     cat_cols = df.select_dtypes(include='object').columns
+#     for col in cat_cols:
+#         counts = df[col].value_counts()
+#         rare = counts[counts < 3].index
+#         df[col] = df[col].replace(rare, "Other")
+
+#     # Remove constant columns
+#     df = df.loc[:, df.nunique() > 1].copy()
+
+#     return df
+
 def clean_data(raw_data):
     """
-    Clean file_data returned from DB.
-    - Extract nested row_data JSON correctly
-    - Handle multiple sheets
-    - Remove technical metadata columns
-    - Clean values
+    Convert stored DB raw file_data into:
+    [
+        {
+            "table_name": "Sheet1",
+            "clean_data": [ {...}, {...} ]
+        },
+        {
+            "table_name": "Sheet2",
+            "clean_data": [ {...}, {...} ]
+        }
+    ]
     """
 
     if not raw_data:
-        return pd.DataFrame()
+        return []
 
-    extracted_rows = []
+    # STEP 1: Extract rows grouped by sheet
+    sheet_wise_rows = {}
 
     for row in raw_data:
-        # row_data is string → convert to dict
+
         row_json = row.get("row_data")
 
-        if not row_json:
-            continue
-
-        # If row_data is a stringified JSON – decode it
+        # Decode if string
         if isinstance(row_json, str):
             try:
                 row_json = json.loads(row_json)
             except:
                 continue
 
-        # row_json expected structure:
-        # {"data": { "Sheet1": [ {..}, {..} ] }}
-        if "data" in row_json:
-            sheets = row_json["data"]
+        if not row_json or "data" not in row_json:
+            continue
 
-            # Extract rows from each sheet
-            for sheet_name, sheet_rows in sheets.items():
-                if isinstance(sheet_rows, list):
-                    for r in sheet_rows:
-                        # Add sheet tag and technical info if required
-                        rec = {
-                            **r,
-                            "sheet_name": sheet_name,
-                            "file_name": row.get("file_name")
-                        }
-                        extracted_rows.append(rec)
+        sheets = row_json["data"]
 
-    if not extracted_rows:
-        return pd.DataFrame()
+        # Each sheet inside the file
+        for sheet_name, sheet_rows in sheets.items():
 
-    df = pd.DataFrame(extracted_rows)
+            if not isinstance(sheet_rows, list):
+                continue
 
-    # Remove technical system columns
-    drop_cols = ["unique_id", "session_id", "session_name"]
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
+            if sheet_name not in sheet_wise_rows:
+                sheet_wise_rows[sheet_name] = []
 
-    # ---------------------
-    # BASIC CLEANING
-    # ---------------------
-    df = df.drop_duplicates().copy()
+            # Add all rows for this sheet
+            for r in sheet_rows:
+                clean_record = {**r}
+                sheet_wise_rows[sheet_name].append(clean_record)
 
-    # Fill missing
-    for col in df.columns:
-        if df[col].dtype == object:
-            df[col] = df[col].fillna("Unknown")
-        else:
-            df[col] = df[col].fillna(0)
+    # STEP 2: Clean each sheet independently
+    final_output = []
 
-    # String trim
-    for col in df.select_dtypes(include='object').columns:
-        df[col] = df[col].astype(str).str.strip().str.replace(r'\s+', ' ', regex=True)
+    for sheet_name, rows in sheet_wise_rows.items():
 
-    # Convert date-like columns
-    for col in df.columns:
-        if 'date' in col.lower():
-            df[col] = pd.to_datetime(df[col], errors='ignore')
+        df = pd.DataFrame(rows)
 
-    # Outlier handling (numeric)
-    numeric_cols = df.select_dtypes(include=np.number).columns
-    for col in numeric_cols:
-        Q1 = df[col].quantile(0.25)
-        Q3 = df[col].quantile(0.75)
-        IQR = Q3 - Q1
-        df[col] = df[col].clip(Q1 - 1.5 * IQR, Q3 + 1.5 * IQR)
+        # ---------- CLEANING ----------
+        if df.empty:
+            continue
 
-    # Rare category handling
-    cat_cols = df.select_dtypes(include='object').columns
-    for col in cat_cols:
-        counts = df[col].value_counts()
-        rare = counts[counts < 3].index
-        df[col] = df[col].replace(rare, "Other")
+        df = df.dropna(how="all").drop_duplicates()
 
-    # Remove constant columns
-    df = df.loc[:, df.nunique() > 1].copy()
+        # Replace NaN
+        df = df.where(pd.notnull(df), None)
 
-    return df
+        # Trim strings
+        for col in df.select_dtypes(include='object').columns:
+            df[col] = df[col].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
 
+        # Convert dates
+        for col in df.columns:
+            if "date" in col.lower():
+                try:
+                    df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%Y-%m-%d")
+                except:
+                    pass
+
+        # Remove constant columns
+        df = df.loc[:, df.nunique() > 1]
+
+        # Convert DF back to array of objects
+        clean_array = df.to_dict(orient="records")
+
+        final_output.append({
+            "table_name": sheet_name,
+            "clean_data": clean_array
+        })
+
+    return final_output
 
 
 
@@ -289,13 +368,30 @@ def process_session_data_controller():
             return build_response(False, "No data found for this session", 404)
 
           # Clean the data
-        df_cleaned = clean_data(raw_data)
-        print("Cleaned Data:", df_cleaned)
-        data=df_cleaned.to_dict(orient='records')
-        column_metadata = build_column_store(df_cleaned, call_llm)
-        print("Column Metadata:", column_metadata)
+        # df_cleaned = clean_data(raw_data)
+        # print("Cleaned Data:", len(df_cleaned))
+        # # data=df_cleaned.to_dict(orient='records')
+        tables = clean_data(raw_data)
+
+        final_result = []
+
+        for table in tables:
+
+            table_name = table["table_name"]
+            rows = table["clean_data"]   # array of objects
+
+            # Build column metadata → needs DataFrame
+            df = pd.DataFrame(rows)
+
+            column_meta = build_column_store(df, call_llm)
+
+            final_result.append({
+                "table_name": table_name,
+                "column_metadata": column_meta,
+                "clean_data": rows
+            })
         # 3️⃣ Return raw data in response
-        return build_response(True, "Raw data fetched successfully", 200, data=column_metadata)
+        return build_response(True, "Raw data fetched successfully", 200, data=final_result)
 
     except Exception as e:
         return build_response(False, f"Error fetching data: {str(e)}", 500)

@@ -53,10 +53,16 @@ def generate_user_id(firstname):
 #         i += 1
 #     return f"{size_bytes:.2f} {size_name[i]}"
 
+# def format_file_size(num_bytes):
+#     for unit in ["Bytes", "KB", "MB", "GB", "TB"]:
+#         if num_bytes < 1024:
+#             return f"{num_bytes:.2f} {unit}"
+#         num_bytes /= 1024
 def format_file_size(num_bytes):
     for unit in ["Bytes", "KB", "MB", "GB", "TB"]:
         if num_bytes < 1024:
-            return f"{num_bytes:.2f} {unit}"
+            # Round to nearest integer
+            return f"{round(num_bytes)} {unit}"
         num_bytes /= 1024
 
 
