@@ -434,4 +434,3 @@ def upload_files_count_controller():
 
     except Exception as e:
         return build_response(False, f"Unexpected Error: {str(e)}", 500)
-
