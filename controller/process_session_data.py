@@ -7,8 +7,6 @@ import numpy as np
 import re
 from model.llm_client import call_llm 
 
-import json
-from database.dbConnection import get_db_connection
 
 def save_processed_cleaned_data(
     session_id,

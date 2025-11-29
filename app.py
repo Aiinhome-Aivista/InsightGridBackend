@@ -6,6 +6,10 @@ from controller.login import login_controller
 from controller.get_tracker import get_tracker_controller
 from controller.upload_files_count import upload_files_count_controller
 from controller.process_session_data import process_session_data_controller
+from controller.get_ui_data import get_ui_data_controller
+from controller.chat_query import chat_query_controller
+from controller.save_chat import save_chat_controller
+from controller.get_saved_chat_response import get_chat_history_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -35,6 +39,21 @@ def upload_files_count_route():
 def process_session_data_route():
     return process_session_data_controller()
 
+@app.route("/get_ui_data", methods=["POST"])
+def get_ui_data_route():
+    return get_ui_data_controller()
+
+@app.route("/chat_query", methods=["POST"])
+def chat_query_route():
+    return chat_query_controller()
+
+@app.route("/save_chat", methods=["POST"])
+def save_chat_route():
+    return save_chat_controller()
+
+@app.route("/get_chat_history", methods=["POST"])
+def get_chat_history_route():
+    return get_chat_history_controller()   
 
 # Run the Flask Server
 if __name__ == "__main__":
