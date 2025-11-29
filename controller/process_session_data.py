@@ -7,6 +7,144 @@ import numpy as np
 import re
 from model.llm_client import call_llm 
 
+import json
+from database.dbConnection import get_db_connection
+
+def save_processed_cleaned_data(
+    session_id,
+    session_name,
+    global_operations,
+    final_result
+):
+    """
+    Save processed cleaned data into database using stored procedure.
+    This function ONLY handles DB saving logic.
+    """
+
+    # file_master status values (coming directly from your final_result)
+    upload_status = "Done"
+    data_insights_status = final_result[0]["insights_status"] if final_result else "Failed"
+    relationship_mapping_status = final_result[0]["relationship_extract_status"] if final_result else "Failed"
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.callproc("sp_store_processed_cleaned_data", [
+            session_id,
+            session_name,
+            json.dumps(global_operations),
+            json.dumps(final_result),
+            upload_status,
+            data_insights_status,
+            relationship_mapping_status
+        ])
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return True, None  # success
+
+    except Exception as e:
+        return False, str(e)  # failed
+
+
+def build_global_operations(tables, call_llm):
+    """
+    Extract ALL distinct datatypes from ALL tables
+    and generate suggested operations ONCE per datatype.
+    """
+
+    datatype_samples = {}  # { "number": [values], "date": [...], ... }
+
+    # Collect samples for each datatype
+    for table in tables:
+        df = pd.DataFrame(table["clean_data"])
+        if df.empty:
+            continue
+
+        for col in df.columns:
+            sample_vals = df[col].head(50).tolist()
+            detected_type = infer_type_from_values(sample_vals)
+
+            if detected_type not in datatype_samples:
+                datatype_samples[detected_type] = sample_vals
+
+    # Now call LLM ONCE per distinct datatype
+    global_operations = {}
+
+    for dtype, samples in datatype_samples.items():
+        try:
+            ops = get_dynamic_operations_llm(dtype, dtype, samples, call_llm)
+        except:
+            ops = ["LLM Error"]
+
+        global_operations[dtype] = ops
+
+    return global_operations
+
+def generate_insights_and_relationships(tables, call_llm):
+     # Build tables_text for LLM input
+    tables_text = ""
+    for table in tables:
+        tables_text += f"Table: {table['table_name']}\n"
+        df = pd.DataFrame(table["clean_data"])
+        if not df.empty:
+            # Take only first 50 rows to avoid token limit
+            df_sample = df.head(50)
+            tables_text += df_sample.to_string(index=False)
+        tables_text += "\n\n"
+    prompt = f"""
+    You are a professional data analyst.
+
+    I will provide you with tables from one or more CSV/Excel files.
+    The tables may have arbitrary columns and data.
+
+    TASK:
+    1. Analyze all the tables and detect important patterns or trends.
+    2. Summarize notable insights per table about:
+    - Key entities (customers, products, locations)
+    - Quantities, counts, numerical patterns
+    - Dates, sequences, peaks
+    3. Detect possible relationships between tables:
+    - Columns that could serve as join keys
+    - Suggest the type of join for each relationship (INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL OUTER JOIN, EXTERNAL JOIN,SELF JOIN)
+    - Provide reasoning if possible
+
+    Return a JSON object:
+    {{
+    "table_insights": {{
+        "Sheet1": {{
+        "insights": ["..."],
+        "relationships": [
+            {{
+            "target_table": "Sheet2",
+            "join_column": "CustomerID",
+            "join_type": "LEFT JOIN",
+            "reason": "Sheet1 has all customers, Sheet2 has sales only for some customers"
+            }}
+        ]
+        }},
+        "Sheet2": {{
+        "insights": ["..."],
+        "relationships": []
+        }}
+    }}
+    }}
+
+    Only return valid JSON. Do not include code fences or explanations.
+
+    Tables:
+    {tables_text}
+    """
+    try:
+        llm_response = call_llm(prompt)
+        llm_response = re.sub(r"```json|```", "", llm_response, flags=re.IGNORECASE).strip()
+        return json.loads(llm_response)
+    except Exception as e:
+        return {"error": str(e)}
+
 # -----------------------------
 # Helper: Fetch raw data from DB
 # -----------------------------
@@ -31,106 +169,42 @@ def fetch_raw_data(session_id, session_name):
     except Exception as e:
         raise Exception(f"Error fetching data: {str(e)}")
 
+# -----------------------------
+# LLM-based dynamic operations
+# -----------------------------
+def get_dynamic_operations_llm(col_name, detected_type, sample_values, call_llm):
+    """
+    Ask LLM to suggest UI operations/filters for a column dynamically.
+    """
+    prompt = f"""
+You are a data analyst. Based on the column name, detected type, and sample values,
+suggest appropriate operations or filters that can be applied to this column in a UI.
+Return ONLY as a JSON array of strings. Example: ["Sum", "Filter by Range", "Top N"]
+
+Column Name: {col_name}
+Detected Type: {detected_type}
+Sample Values: {sample_values[:10]}
+"""
+    try:
+        response = call_llm(prompt)
+    except Exception as e:
+        return ["LLM Error: " + str(e)]
+
+    response = re.sub(r"```json|```", "", response, flags=re.IGNORECASE).strip()
+
+    try:
+        ops = json.loads(response)
+        if not isinstance(ops, list):
+            ops = [str(ops)]
+    except:
+        ops = [response]
+
+    return ops
 
 
 # -----------------------------
 # Helper: Clean raw data
 # -----------------------------
-# def clean_data(raw_data):
-#     """
-#     Clean file_data returned from DB.
-#     - Extract nested row_data JSON correctly
-#     - Handle multiple sheets
-#     - Remove technical metadata columns
-#     - Clean values
-#     """
-
-#     if not raw_data:
-#         return pd.DataFrame()
-
-#     extracted_rows = []
-
-#     for row in raw_data:
-#         # row_data is string → convert to dict
-#         row_json = row.get("row_data")
-
-#         if not row_json:
-#             continue
-
-#         # If row_data is a stringified JSON – decode it
-#         if isinstance(row_json, str):
-#             try:
-#                 row_json = json.loads(row_json)
-#             except:
-#                 continue
-
-#         # row_json expected structure:
-#         # {"data": { "Sheet1": [ {..}, {..} ] }}
-#         if "data" in row_json:
-#             sheets = row_json["data"]
-
-#             # Extract rows from each sheet
-#             for sheet_name, sheet_rows in sheets.items():
-#                 if isinstance(sheet_rows, list):
-#                     for r in sheet_rows:
-#                         # Add sheet tag and technical info if required
-#                         rec = {
-#                             **r,
-#                             "sheet_name": sheet_name,
-#                             "file_name": row.get("file_name")
-#                         }
-#                         extracted_rows.append(rec)
-
-#     if not extracted_rows:
-#         return pd.DataFrame()
-
-#     df = pd.DataFrame(extracted_rows)
-
-#     # Remove technical system columns
-#     drop_cols = ["unique_id", "session_id", "session_name"]
-#     df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
-
-#     # ---------------------
-#     # BASIC CLEANING
-#     # ---------------------
-#     df = df.drop_duplicates().copy()
-
-#     # Fill missing
-#     for col in df.columns:
-#         if df[col].dtype == object:
-#             df[col] = df[col].fillna("Unknown")
-#         else:
-#             df[col] = df[col].fillna(0)
-
-#     # String trim
-#     for col in df.select_dtypes(include='object').columns:
-#         df[col] = df[col].astype(str).str.strip().str.replace(r'\s+', ' ', regex=True)
-
-#     # Convert date-like columns
-#     for col in df.columns:
-#         if 'date' in col.lower():
-#             df[col] = pd.to_datetime(df[col], errors='ignore')
-
-#     # Outlier handling (numeric)
-#     numeric_cols = df.select_dtypes(include=np.number).columns
-#     for col in numeric_cols:
-#         Q1 = df[col].quantile(0.25)
-#         Q3 = df[col].quantile(0.75)
-#         IQR = Q3 - Q1
-#         df[col] = df[col].clip(Q1 - 1.5 * IQR, Q3 + 1.5 * IQR)
-
-#     # Rare category handling
-#     cat_cols = df.select_dtypes(include='object').columns
-#     for col in cat_cols:
-#         counts = df[col].value_counts()
-#         rare = counts[counts < 3].index
-#         df[col] = df[col].replace(rare, "Other")
-
-#     # Remove constant columns
-#     df = df.loc[:, df.nunique() > 1].copy()
-
-#     return df
-
 def clean_data(raw_data):
     """
     Convert stored DB raw file_data into:
@@ -223,9 +297,6 @@ def clean_data(raw_data):
 
     return final_output
 
-
-
-
 # -------------------------------------------------------------
 # 1. AI-Based Type Inference (NO HARDCODED NAME-BASED RULES)
 # -------------------------------------------------------------
@@ -285,14 +356,13 @@ def infer_type_from_values(values):
     # ---------- 5️⃣ DEFAULT ----------
     return "string"
 
-
-# -------------------------------------------------------------
-# 2. Build Column Store With AI Descriptions
+# 2. Build Column Store With AI Descriptions & Dynamic Operations
 # -------------------------------------------------------------
 def build_column_store(df, call_llm):
     column_store = []
     col_id = 1
     skip_cols = {"sheet_name", "file_name"}
+
 
     for col in df.columns:
         if col in skip_cols:
@@ -301,6 +371,7 @@ def build_column_store(df, call_llm):
         sample_vals = df[col].head(50).tolist()
         detected_type = infer_type_from_values(sample_vals)
 
+        # ---------- LLM for contextual & technical description ----------
         prompt = f"""
 You are a data analyst. 
 Given this column name and sample values, write:
@@ -318,16 +389,13 @@ sample_values: {sample_vals[:5]}
 detected_type: {detected_type}
 """
 
-        # Call LLM safely
         try:
             ai_text = call_llm(prompt)
         except Exception as e:
             ai_text = f'{{"contextual_meaning": "[LLM Error] {str(e)}", "technical_description": ""}}'
 
-        # Remove code fences if any
         ai_text = re.sub(r"```json|```", "", ai_text, flags=re.IGNORECASE).strip()
 
-        # Parse JSON safely
         try:
             ai_json = json.loads(ai_text)
             contextual = ai_json.get("contextual_meaning", "")
@@ -335,13 +403,12 @@ detected_type: {detected_type}
         except:
             contextual = ai_text
             technical = ""
-
         column_store.append({
             "column_id": col_id,
             "column_name": col,
             "column_type": detected_type,
             "contextual_summary": contextual,
-            "technical_summary": technical
+            "technical_summary": technical,
         })
 
         col_id += 1
@@ -363,36 +430,93 @@ def process_session_data_controller():
 
         # 2️⃣ Fetch raw data
         raw_data = fetch_raw_data(session_id, session_name)
-        print("Raw Data:", raw_data)
+        # print("Raw Data:", raw_data)
         if not raw_data:
             return build_response(False, "No data found for this session", 404)
 
-          # Clean the data
-        # df_cleaned = clean_data(raw_data)
-        # print("Cleaned Data:", len(df_cleaned))
-        # # data=df_cleaned.to_dict(orient='records')
         tables = clean_data(raw_data)
+        # NEW: Build suggested operations globally (all tables, all columns)
+        global_operations = build_global_operations(tables, call_llm)
+        # Generate insights and relationships
+        insights_data = generate_insights_and_relationships(tables, call_llm)
 
         final_result = []
 
         for table in tables:
 
             table_name = table["table_name"]
-            rows = table["clean_data"]   # array of objects
+            rows = table["clean_data"]
 
-            # Build column metadata → needs DataFrame
+            # Build column metadata
             df = pd.DataFrame(rows)
-
             column_meta = build_column_store(df, call_llm)
 
+            # Extract insights safely
+            table_insight_block = insights_data.get("table_insights", {}).get(table_name, {})
+
+            insights = table_insight_block.get("insights")
+            relationships = table_insight_block.get("relationships")
+
+            # ---------- INSIGHTS STATUS ----------
+            if isinstance(insights, list):
+                insights_status = "Done"
+            else:
+                insights_status = "Failed"
+                insights = []
+            
+            # ---------- RELATIONSHIP STATUS ----------
+            if isinstance(relationships, list):
+                relationship_extract_status = "Done"
+            else:
+                relationship_extract_status = "Failed"
+                relationships = []
+            clean_total_rows = len(rows)
+            clean_total_columns = len(rows[0]) if rows else 0
+            clean_columns = list(rows[0].keys()) if rows else []
             final_result.append({
                 "table_name": table_name,
                 "column_metadata": column_meta,
-                "clean_data": rows
+                "clean_data": {
+                    "rows": rows,
+                    "clean_total_rows": clean_total_rows,
+                    "clean_total_columns": clean_total_columns,
+                    "clean_columns": clean_columns
+                },
+                "insights": insights,
+                "insights_status": insights_status,
+                "relationships": relationships,
+                "relationship_extract_status": relationship_extract_status
             })
-        # 3️⃣ Return raw data in response
-        return build_response(True, "Raw data fetched successfully", 200, data=final_result)
 
+        # return build_response(True, "Raw data fetched successfully", 200, data={
+        #     "global_operations": global_operations,
+        #     "tables": final_result
+        # })
+
+        # 3️⃣ Return raw data in response
+        # return build_response(True, "Raw data fetched successfully", 200, data=final_result)
+           # --------------------------------------
+        # 3️⃣ SAVE INTO DATABASE
+        # --------------------------------------
+        save_success, save_error = save_processed_cleaned_data(
+            session_id,
+            session_name,
+            global_operations,
+            final_result
+        )
+
+        if not save_success:
+            print("DB Save Error:", save_error)
+
+
+        # --------------------------------------
+        # 4️⃣ Return Response
+        # --------------------------------------
+       
+        return build_response(True, "Raw data fetched successfully", 200, data={
+            "global_operations": global_operations,
+            "tables": final_result
+        })
     except Exception as e:
         return build_response(False, f"Error fetching data: {str(e)}", 500)
 

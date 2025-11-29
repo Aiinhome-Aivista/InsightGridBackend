@@ -42,22 +42,6 @@ def generate_user_id(firstname):
     short_id = uuid.uuid4().hex[:6]   # first 6 chars
     return f"{firstname.lower()}_{short_id}"
 
-# Format file size in human-readable form
-# def format_file_size(size_bytes):
-#     if size_bytes == 0:
-#         return "0B"
-#     size_name = ("B", "KB", "MB", "GB", "TB")
-#     i = 0
-#     while size_bytes >= 1024 and i < len(size_name)-1:
-#         size_bytes /= 1024.0
-#         i += 1
-#     return f"{size_bytes:.2f} {size_name[i]}"
-
-# def format_file_size(num_bytes):
-#     for unit in ["Bytes", "KB", "MB", "GB", "TB"]:
-#         if num_bytes < 1024:
-#             return f"{num_bytes:.2f} {unit}"
-#         num_bytes /= 1024
 def format_file_size(num_bytes):
     for unit in ["Bytes", "KB", "MB", "GB", "TB"]:
         if num_bytes < 1024:
