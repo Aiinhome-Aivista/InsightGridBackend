@@ -11,6 +11,7 @@ def get_ui_data_controller():
         session_id = body.get("session_id")
         session_name = body.get("session_name")
         file_name = body.get("file_name")
+        table_name = body.get("table_name")   # <-- NEW
 
         if not all([session_id, session_name, file_name]):
             return build_response(False, "session_id, session_name, file_name required", 400)
@@ -18,6 +19,27 @@ def get_ui_data_controller():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        # ----------------------------------------------------------------------
+        # MODE 1 → Return only table names for dropdown
+        # ----------------------------------------------------------------------
+        if not table_name:
+            cursor.execute("""
+                SELECT DISTINCT table_name 
+                FROM processed_cleaned_table_data
+                WHERE session_id=%s AND session_name=%s AND file_name=%s
+            """, (session_id, session_name, file_name))
+
+            tables = [row["table_name"] for row in cursor.fetchall()]
+
+            cursor.close()
+            conn.close()
+
+            return build_response(True, "Table list fetched", 200, {"tables": tables})
+
+
+        # ----------------------------------------------------------------------
+        # MODE 2 → Return full table data of the selected table
+        # ----------------------------------------------------------------------
         cursor.execute("""
             SELECT 
                 table_name,
@@ -29,53 +51,38 @@ def get_ui_data_controller():
                 insights_status,
                 relationship_extract_status
             FROM processed_cleaned_table_data
-            WHERE session_id=%s AND session_name=%s AND file_name=%s
-        """, (session_id, session_name, file_name))
+            WHERE session_id=%s AND session_name=%s AND file_name=%s AND table_name=%s
+        """, (session_id, session_name, file_name, table_name))
 
-        results = cursor.fetchall()
+        tbl = cursor.fetchone()
+
         cursor.close()
         conn.close()
 
-        ui_tables = []
+        if not tbl:
+            return build_response(False, "No table found", 404)
 
-        for tbl in results:
-
-            # Fix: clean_columns should be a list (JSON array)
-            clean_cols = tbl["clean_columns"]
-            if isinstance(clean_cols, str):
+        # Helper to parse JSON safely
+        def parse_json(value):
+            if isinstance(value, str):
                 try:
-                    clean_cols = json.loads(clean_cols)
+                    return json.loads(value)
                 except:
-                    clean_cols = []
+                    return []
+            return value or []
 
-            # Fix: column_metadata should be list of dicts
-            col_meta = tbl["column_metadata"]
-            if isinstance(col_meta, str):
-                try:
-                    col_meta = json.loads(col_meta)
-                except:
-                    col_meta = []
+        response = {
+            "table_name": tbl["table_name"],
+            "columns": parse_json(tbl["clean_columns"]),
+            "column_metadata": parse_json(tbl["column_metadata"]),
+            "rows": parse_json(tbl["row_data"]),
+            "insights": parse_json(tbl["insights"]),
+            "relationships": parse_json(tbl["relationships"]),
+            "insights_status": tbl["insights_status"],
+            "relationship_extract_status": tbl["relationship_extract_status"]
+        }
 
-            # Fix: row_data should be list of rows
-            rows = tbl["row_data"]
-            if isinstance(rows, str):
-                try:
-                    rows = json.loads(rows)
-                except:
-                    rows = []
-
-            ui_tables.append({
-                "table_name": tbl["table_name"],
-                "columns": clean_cols,
-                "column_metadata": col_meta,
-                "rows": rows,
-                "insights": tbl["insights"],
-                "insights_status": tbl["insights_status"],
-                "relationships": tbl["relationships"],
-                "relationship_extract_status": tbl["relationship_extract_status"]
-            })
-
-        return build_response(True, "UI Data fetched", 200, ui_tables)
+        return build_response(True, "UI Data fetched", 200, response)
 
     except Exception as e:
         return build_response(False, f"Error: {str(e)}", 500)
