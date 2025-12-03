@@ -42,78 +42,91 @@ def call_mistral_llm(system_instruction, user_prompt):
         return "DELIMITER ;;\nSELECT 'LLM Error' AS error;;\nDELIMITER ;"
 
 
+
 # =========================================================
-# 2. EXECUTE GENERATED SQL
+# 2. SQL EXECUTOR (FULL — FIXED)
 # =========================================================
 def execute_generated_sql(sql_code):
-
     conn = get_db_connection()
     cursor = conn.cursor()
+    last_error = None
 
     try:
-        sql_code = sql_code.replace("$$", ";;").replace("//", ";;")
-        sql_code = re.sub(r"```sql|```", "", sql_code, flags=re.IGNORECASE).strip()
+        # 1. Remove markdown and DELIMITER lines
+        clean_sql = re.sub(r"```sql|```", "", sql_code, flags=re.IGNORECASE)
+        clean_sql = re.sub(r"DELIMITER\s+;;", "", clean_sql, flags=re.IGNORECASE)
+        clean_sql = re.sub(r"DELIMITER\s+;", "", clean_sql, flags=re.IGNORECASE)
+        clean_sql = clean_sql.replace("$$", ";;").replace("//", ";;")
 
-        statements = sql_code.split(";;")
+        # 2. Extract SQL starting from CREATE / WITH / SELECT
+        start = re.search(r"(CREATE\s+PROCEDURE|WITH|SELECT)", clean_sql, flags=re.IGNORECASE)
+        if start:
+            clean_sql = clean_sql[start.start():]
+        else:
+            return False, None, "Unable to detect SQL start"
+
+        # 3. Extract until END; only
+        end_match = re.search(r"END\s*;", clean_sql, flags=re.IGNORECASE)
+        if end_match:
+            clean_sql = clean_sql[:end_match.end()]
+
+        # 4. Split SQL statements
+        statements = [s.strip() for s in clean_sql.split(";;") if s.strip()]
 
         proc_name = None
         executed_count = 0
 
         for stmt in statements:
-            stmt = stmt.strip()
-            stmt = re.sub(r"DELIMITER", "", stmt, flags=re.IGNORECASE).strip()
-
-            if not re.match(r"^(CREATE|DROP|SELECT|WITH|INSERT|UPDATE|DELETE|SET)", stmt, re.IGNORECASE):
+            if stmt.upper() == "END":
                 continue
 
+            # Detect stored procedure name
             match = re.search(r"CREATE\s+PROCEDURE\s+`?(\w+)`?", stmt, re.IGNORECASE)
             if match:
                 proc_name = match.group(1)
                 cursor.execute(f"DROP PROCEDURE IF EXISTS `{proc_name}`")
 
-            if stmt.upper() != "END":
-                try:
-                    cursor.execute(stmt)
-                    executed_count += 1
-                except mysql.connector.Error as err:
-                    print("SQL EXECUTION ERROR:", err)
+            # Skip non-SQL text
+            if not re.match(r"^(CREATE|WITH|SELECT|INSERT|UPDATE|DELETE|CALL)", stmt, re.IGNORECASE):
+                continue
+
+            cursor.execute(stmt)
+            executed_count += 1
 
         conn.commit()
         cursor.close()
 
         if executed_count == 0:
-            return False, None, "No valid SQL statements found."
+            return False, None, "No valid SQL executed"
 
-        # Execute procedure
+        if not proc_name:
+            return False, None, "Procedure name not found"
+
+        # 5. Execute stored procedure
+        cursor2 = conn.cursor(dictionary=True)
+        cursor2.callproc(proc_name)
+
         results = []
-        if proc_name:
-            cursor2 = conn.cursor(dictionary=True)
-            try:
-                cursor2.callproc(proc_name)
-                for res in cursor2.stored_results():
-                    results.extend(res.fetchall())
-            except Exception as e:
-                return False, None, f"Stored Procedure Execution Error: {e}"
-            finally:
-                cursor2.close()
+        for rs in cursor2.stored_results():
+            results.extend(rs.fetchall())
 
-        return True, results, "Executed Successfully"
+        cursor2.close()
+        return True, results, "Success"
 
     except Exception as e:
         return False, None, f"Server Error: {str(e)}"
 
     finally:
-        conn.close()
+        if conn.is_connected():
+            conn.close()
 
 
 # =========================================================
-# 3. GENERATE SQL FROM AI  (/api/chat)
+# 3. GENERATE SQL FROM AI  (/chat_ai)
 # =========================================================
-def chat_ai_controller():
-
+def chat_endpoint():
     try:
         data = request.get_json() or {}
-
         session_id = data.get("session_id")
         session_name = data.get("session_name")
         file_name = data.get("file_name")
@@ -123,118 +136,80 @@ def chat_ai_controller():
         if not all([session_id, session_name, file_name, user_query]):
             return build_response(False, "Missing required fields", 400)
 
-        # Fetch schema
+        # -------- FETCH SCHEMA ----------
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT table_name, column_metadata
-            FROM processed_cleaned_table_data
-            WHERE session_id=%s AND file_name=%s
-        """, (session_id, file_name))
-
+        cursor.execute(
+            "SELECT table_name, column_metadata FROM processed_cleaned_table_data WHERE session_id=%s AND file_name=%s",
+            (session_id, file_name)
+        )
         db_tables = cursor.fetchall()
         cursor.close()
         conn.close()
 
-        # Build schema block
+        if not db_tables:
+            return build_response(False, "No schema found.", 404)
+
+        # -------- Build Schema Context ----------
         schema_info = []
+
         for t in db_tables:
-            tname = t["table_name"]
-            metadata = json.loads(t["column_metadata"])
+            t_name = t.get("table_name")
+            raw = t.get("column_metadata")
+            meta = json.loads(raw) if isinstance(raw, str) else (raw or [])
 
             col_defs = []
-            for c in metadata:
-                cname = c["column_name"]
+            for c in meta:
+                name = c["column_name"]
                 ctype = c["column_type"]
 
                 sql_type = "VARCHAR(255)"
-                if ctype == "number": sql_type = "DECIMAL(65,4)"
-                if ctype == "int": sql_type = "DECIMAL(65,0)"
-                if ctype == "date": sql_type = "DATE"
+                if "id" in name.lower():
+                    sql_type = "VARCHAR(255)"
+                elif ctype == "number":
+                    sql_type = "DECIMAL(65,4)"
+                elif ctype == "int":
+                    sql_type = "DECIMAL(65,0)"
+                elif ctype == "date":
+                    sql_type = "DATE"
 
-                col_defs.append(f"`{cname}` {sql_type} PATH '$.\"{cname}\"'")
+                col_defs.append(f"`{name}` {sql_type} PATH '$.\"{name}\"'")
 
-            schema_info.append(f"Table Name: '{tname}'\nColumns: {', '.join(col_defs)}")
+            schema_info.append(f"Table Name: '{t_name}'\nColumns: {', '.join(col_defs)}")
 
-        schema_context = "\n\n".join(schema_info)
+        schema_context_str = "\n\n".join(schema_info)
 
-        # System Prompt
-        system_instruction = """
-        You are a MySQL 8.0 Expert.
-       
-        DATA ARCHITECTURE:
-        - Table: `processed_cleaned_table_data`
-        - Column: `row_data` (JSON). WRAPPED in "rows" key -> Use '$[*]'.
-       
-        YOUR TASK:
-        Write a Stored Procedure to answer the query using `JSON_TABLE` and CTEs.
-       
-        CRITICAL RULES:
-        1. **NO PARAMETERS**: The Stored Procedure must take 0 arguments. Example: `CREATE PROCEDURE my_sp()`
-           - HARDCODE the `session_id` and `file_name` provided below directly into the WHERE clauses.
-        2. **INCLUDE ALL COLUMNS**: In the `COLUMNS(...)` section, you MUST define **EVERY** column listed in the "Context (Schema)" provided.
-        3. **REAL JOIN KEYS ONLY**: Do NOT invent columns like 'JoinID'. Use the actual common column (e.g., 'CustomerID', 'OrderID') from the Schema to perform the JOIN.
-       
-        STRICT PATTERN:
-       
-        WITH
-        t1 AS (
-            SELECT jt.* FROM processed_cleaned_table_data main,
-            JSON_TABLE(main.row_data, '$[*]' COLUMNS (
-                -- DEFINE ALL COLUMNS FROM SCHEMA HERE
-                col1 VARCHAR(255) PATH '$."col1"',
-                CustomerID DECIMAL(65,0) PATH '$."CustomerID"'
-            )) AS jt
-            WHERE main.table_name = 'Table1'
-              AND main.session_id = 'HARDCODED_SESSION_ID'
-              AND main.file_name = 'HARDCODED_FILE_NAME'
-        ),
-        t2 AS (
-            SELECT jt.* FROM processed_cleaned_table_data main,
-            JSON_TABLE(main.row_data, '$[*]' COLUMNS (
-                -- DEFINE ALL COLUMNS FROM SCHEMA HERE
-                colA VARCHAR(255) PATH '$."colA"',
-                CustomerID DECIMAL(65,0) PATH '$."CustomerID"'
-            )) AS jt
-            WHERE main.table_name = 'Table2'
-              AND main.session_id = 'HARDCODED_SESSION_ID'
-              AND main.file_name = 'HARDCODED_FILE_NAME'
-        )
-        SELECT t1.col1, SUM(t2.colA)
-        FROM t1
-        JOIN t2 ON t1.CustomerID = t2.CustomerID  -- Use the REAL column name
-        GROUP BY t1.col1;
-       
-        RULES:
-        1. Output ONLY valid SQL.
-        2. Start with 'DELIMITER ;;' and end with 'DELIMITER ;'.
-        """
-
-
-
+        # ----------------------------------------------
+        # System & User Prompt for AI
+        # ----------------------------------------------
+        system_instruction = f"""
+You are a MySQL 8.0 Expert.
+Use JSON_TABLE with '$[*]' always.
+Stored Procedure MUST take 0 parameters.
+Hardcode session_id='{session_id}' and file_name='{file_name}'.
+Generate ONLY SQL between:
+DELIMITER ;;
+... SQL ...
+DELIMITER ;
+"""
 
         user_prompt = f"""
-        Current Session ID: {session_id}
-        Current File Name: {file_name}
-       
-        Context (Schema):
-        {schema_context}
-       
-        User Query: "{user_query}"
-       
-        Generate the Stored Procedure now.
-        """
+Schema:
+{schema_context_str}
 
+User Query: "{user_query}"
+Generate SQL now.
+"""
 
-        ai_response = call_mistral_llm(system_instruction, user_prompt)
-        ai_response = re.sub(r"```sql|```", "", ai_response, flags=re.IGNORECASE).strip()
+        ai_sql = call_mistral_llm(system_instruction, user_prompt)
+        ai_sql = re.sub(r"```sql|```", "", ai_sql).strip()
 
-        # Save chat
+        # SAVE CHAT
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.callproc("sp_save_chat", [
             session_id, session_name, file_name, table_name,
-            "User Query", user_query, ai_response, "User"
+            "User Query", user_query, ai_sql, "User"
         ])
         conn.commit()
         cursor.close()
@@ -243,18 +218,18 @@ def chat_ai_controller():
         return build_response(True, "Chat processed", 200, {
             "session_id": session_id,
             "user_query": user_query,
-            "ai_response": ai_response
+            "ai_response": ai_sql
         })
 
     except Exception as e:
         return build_response(False, f"Error: {str(e)}", 500)
 
 
-# =========================================================
-# 4. EXECUTE SQL FROM AI (/api/execute-sql)
-# =========================================================
-def execute_sql_controller():
 
+# =========================================================
+# 4. EXECUTE SQL API
+# =========================================================
+def execute_sql_endpoint():
     try:
         data = request.get_json() or {}
         sql_query = data.get("sql_query")
@@ -266,8 +241,8 @@ def execute_sql_controller():
 
         if success:
             return build_response(True, "Success", 200, results)
-
-        return build_response(False, f"Execution Failed: {msg}", 400)
+        else:
+            return build_response(False, f"Execution Failed: {msg}", 400)
 
     except Exception as e:
         return build_response(False, f"Server Error: {str(e)}", 500)
