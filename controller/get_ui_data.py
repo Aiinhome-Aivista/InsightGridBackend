@@ -17,7 +17,9 @@ def get_ui_data_controller():
             return build_response(False, "session_id, session_name, file_name required", 400)
 
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        # cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
+
 
         # ----------------------------------------------------------------------
         # MODE 1 → Return only table names for dropdown
