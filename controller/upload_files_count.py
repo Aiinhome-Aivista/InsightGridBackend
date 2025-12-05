@@ -17,7 +17,8 @@ def upload_files_count_controller():
         session_id = request.form.get("session_id")
         session_name = request.form.get("session_name")
         files = request.files.getlist("files")
-        created_by = "system"
+        # created_by = "system"
+        created_by = request.form.get("created_by")
 
         # Basic validation (session_id & session_name only)
         if not session_id or not session_name:

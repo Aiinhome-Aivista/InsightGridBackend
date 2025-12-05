@@ -11,6 +11,7 @@ from controller.chat_query import chat_query_controller
 from controller.save_chat import save_chat_controller
 from controller.get_saved_chat_response import get_chat_history_controller
 from controller.sql_ai_executor import chat_endpoint, execute_sql_endpoint
+from controller.get_dashboard_data import get_dashboard_data_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -63,6 +64,10 @@ def chat_ai_route():
 @app.route("/execute_sql", methods=["POST"])
 def execute_sql_route():
     return execute_sql_endpoint()
+
+@app.route("/get_dashboard_data", methods=["POST"])
+def get_dashboard_data_route():
+    return get_dashboard_data_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
