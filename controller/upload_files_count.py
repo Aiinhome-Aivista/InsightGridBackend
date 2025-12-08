@@ -17,7 +17,6 @@ def upload_files_count_controller():
         session_id = request.form.get("session_id")
         session_name = request.form.get("session_name")
         files = request.files.getlist("files")
-        # created_by = "system"
         created_by = request.form.get("created_by")
 
         # Basic validation (session_id & session_name only)
@@ -40,7 +39,7 @@ def upload_files_count_controller():
                     "table_extract_status": "Pending",
                     "column_extract_status": "Pending",
                     "data_insights_status": "Pending",
-                    "relationship_mapping_status": "Pending",
+                    # "relationship_mapping_status": "Pending",
                     "total sheets": 0,
                     "total column": 0,
                     "table name": "",
@@ -64,7 +63,7 @@ def upload_files_count_controller():
                 "table_extract_status": "Pending",
                 "column_extract_status": "Pending",
                 "data_insights_status": "Pending",
-                "relationship_mapping_status": "Pending",
+                # "relationship_mapping_status": "Pending",
                 "total files": len(files),
                 "total sheets": 0,
                 "total column": 0,
@@ -178,7 +177,7 @@ def upload_files_count_controller():
                     cursor.execute("""
                         CALL sp_upload_file_count(
                             %s,%s,%s,%s,%s,%s,%s,
-                            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                            %s,%s,%s,%s,%s,%s,%s,%s,%s
                         )
                     """, (
                         session_id,
@@ -189,7 +188,7 @@ def upload_files_count_controller():
                         result["table_extract_status"],
                         result["column_extract_status"],
                         result["data_insights_status"],
-                        result["relationship_mapping_status"],
+                        # result["relationship_mapping_status"],
                         total_rows,
                         result["total column"],
                         result["table name"],

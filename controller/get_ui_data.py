@@ -17,9 +17,7 @@ def get_ui_data_controller():
             return build_response(False, "session_id, session_name, file_name required", 400)
 
         conn = get_db_connection()
-        # cursor = conn.cursor(dictionary=True)
         cursor = conn.cursor(dictionary=True, buffered=True)
-
 
         # ----------------------------------------------------------------------
         # MODE 1 → Return only table names for dropdown
@@ -28,9 +26,10 @@ def get_ui_data_controller():
             cursor.execute("""
                 SELECT DISTINCT table_name 
                 FROM processed_cleaned_table_data
-                WHERE session_id=%s AND session_name=%s AND file_name=%s
-            """, (session_id, session_name, file_name))
-
+                WHERE session_id=%s AND session_name=%s 
+            """, (session_id, session_name ))
+            # AND file_name=%s
+            # file_name
             tables = [row["table_name"] for row in cursor.fetchall()]
 
             cursor.close()
@@ -53,9 +52,9 @@ def get_ui_data_controller():
                 insights_status,
                 relationship_extract_status
             FROM processed_cleaned_table_data
-            WHERE session_id=%s AND session_name=%s AND file_name=%s AND table_name=%s
-        """, (session_id, session_name, file_name, table_name))
-
+            WHERE session_id=%s AND session_name=%s AND table_name=%s
+        """, (session_id, session_name, table_name))
+        #   , file_name  AND file_name=%s
         tbl = cursor.fetchone()
 
         cursor.close()

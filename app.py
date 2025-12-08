@@ -9,6 +9,7 @@ from controller.process_session_data import process_session_data_controller
 from controller.get_ui_data import get_ui_data_controller
 from controller.chat_query import chat_query_controller
 from controller.save_chat import save_chat_controller
+# from controller.get_saved_chat_response import get_chat_history_controller
 from controller.sql_ai_executor import chat_endpoint, execute_sql_endpoint
 from controller.get_dashboard_data import get_dashboard_data_controller
 from controller.get_saved_chat_response import get_chat_history_by_user_controller
@@ -29,7 +30,7 @@ def register_route():
 def login_route():
     return login_controller()
 
-@app.route("/tracker", methods=["GET"])
+@app.route("/tracker", methods=["POST"])
 def tracker_route():
     return get_tracker_controller()
 
@@ -55,7 +56,8 @@ def save_chat_route():
 
 @app.route("/get_chat_history", methods=["POST"])
 def get_chat_history_route():
-    return get_chat_history_by_user_controller()  
+    return get_chat_history_by_user_controller()
+    # return get_chat_history_controller()  
 
 @app.route("/chat_ai", methods=["POST"])
 def chat_ai_route():
@@ -72,4 +74,3 @@ def get_dashboard_data_route():
 # Run the Flask Server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3008, debug=True)
-   
