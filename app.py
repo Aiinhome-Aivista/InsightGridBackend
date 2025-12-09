@@ -9,6 +9,7 @@ from controller.get_full_table_info import get_full_table_info_controller
 from controller.get_dashboard_data import get_dashboard_data_controller
 from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endpoint_controller
 from controller.query_save import query_save_controller
+from controller.get_saved_query_response import get_saved_query_response_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -54,6 +55,11 @@ def execute_sql_endpoint_route():
 @app.route("/query_save", methods=["POST"])
 def query_save_route():
     return query_save_controller()
+
+@app.route("/get_saved_query_response", methods=["POST"])
+def get_saved_query_response_route():
+    return get_saved_query_response_controller()    
+
 
 # Run the Flask Server
 if __name__ == "__main__":
