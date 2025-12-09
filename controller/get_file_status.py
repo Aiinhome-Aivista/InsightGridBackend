@@ -2,78 +2,78 @@ from flask import request
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 
+
 def get_file_status_controller():
     try:
         body = request.get_json()
 
-        created_by = body.get("created_by")   # user_id now (NOT email)
-        session_id = body.get("session_id")   # session from login
+        created_by = body.get("created_by")
+        session_id = body.get("session_id")
 
-        # --------------------------
-        # BASIC VALIDATION
-        # --------------------------
+        # VALIDATION
         if not created_by:
-            return build_response(False, "created_by (user_id) is required", 400, status="failed")
+            return build_response(False, "created_by is required", 400, status="failed")
 
         if not session_id:
             return build_response(False, "session_id is required", 400, status="failed")
 
         con = get_db_connection()
-        cur = con.cursor(dictionary=True)
-
-        # --------------------------
-        # 1️⃣ VALIDATE SESSION ID
-        # --------------------------
-        cur.execute(
-            "SELECT user_id FROM users WHERE session_id=%s LIMIT 1",
-            (session_id,)
+        cursor = con.cursor(dictionary=True)
+        #  VALIDATE SESSION ID & created_by
+        # -----------------------------------
+        cursor.execute(
+            "SELECT user_id, session_id FROM users WHERE session_id = %s AND user_id = %s LIMIT 1",
+            (session_id, created_by)
         )
-        session_row = cur.fetchone()
+        session_row = cursor.fetchone()
 
         if not session_row:
-            cur.close()
-            con.close()
-            return build_response(False, "Invalid session_id", 400, status="failed")
-
-        # --------------------------
-        # 2️⃣ VALIDATE USER_ID MATCHES SESSION OWNER
-        # --------------------------
-        if session_row["user_id"] != created_by:
-            cur.close()
+            cursor.close()
             con.close()
             return build_response(
                 False,
-                "Unauthorized: session does not belong to this user",
-                401,
-                status="failed"
+                "Invalid session_id or created_by",
+                400
+                # {"status": "failed"}
             )
 
-        # --------------------------
-        # 3️⃣ CALL STORED PROCEDURE SAFELY
-        # --------------------------
-        cur.callproc("sp_get_uploaded_files_status", [created_by, session_id])
+        # CALL SP
+        cursor.callproc("sp_get_uploaded_files_status", [created_by, session_id])
 
-        stored = list(cur.stored_results())
+        stored = list(cursor.stored_results())
         result = stored[0].fetchall() if stored else []
 
-        cur.close()
+        cursor.close()
         con.close()
 
-        # --------------------------
-        # 4️⃣ NO DATA CASE
-        # --------------------------
+        # NO DATA FOUND
         if not result:
             return build_response(
-                True,
-                "No files uploaded yet",
-                200,
+                False,
+                "No data found",
+                404,
                 data=[],
-                status="success"
+                status="failed"
             )
+        # if not result:
+        #     return build_response(
+        #         True,
+        #         "No metadata yet, default pending status",
+        #         200,
+        #         data=[{
+        #             "file_id": None,
+        #             "file_name": None,
+        #             "table_name": None,
+        #             "total_rows": 0,
+        #             "total_columns": 0,
+        #             "table_extraction_status": "pending",
+        #             "column_extraction_status": "pending",
+        #             "data_insights_status": "pending"
+        #         }],
+        #         status="success"
+        #     )
 
-        # --------------------------
-        # 5️⃣ SUCCESS
-        # --------------------------
+        # SUCCESS RESPONSE
         return build_response(
             True,
             "Status fetched successfully",
