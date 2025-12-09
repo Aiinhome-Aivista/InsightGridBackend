@@ -6,6 +6,30 @@ from helper.helperFunctions import build_response
 from model.llm_client import call_llm
 import time
 
+def ask_llm_for_sp_name(user_query):
+    prompt = f"""
+    You must generate ONLY a short MySQL stored procedure name based on this query:
+
+    "{user_query}"
+
+    RULES:
+    - Must be short (2-4 meaningful words)
+    - Must use snake_case
+    - MUST start with: sp_
+    - MUST contain ONLY letters, numbers, and underscores
+    - Do NOT return explanations
+    - Do NOT return SQL
+    - Return ONLY the procedure name
+    """
+
+    name = call_llm(prompt).strip()
+    name = name.replace("`", "").replace(";", "")
+
+    # safety filter
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+
+    return name
+
 
 def chat_endpoint_controller():
     try:
@@ -59,7 +83,7 @@ def chat_endpoint_controller():
         # STEP 3 — Build schema JSON for LLM
         # ======================================================
         schema_json = json.dumps(schema_context, indent=2)
-
+        sp_name = ask_llm_for_sp_name(user_query)
         system_instruction = f"""
 You are a MySQL 8.0 expert.
 
@@ -68,7 +92,7 @@ STRICT OUTPUT RULES:
 1. Output MUST be ONLY this format:
 
 DELIMITER ;;
-CREATE PROCEDURE sp_dynamic_query()
+CREATE PROCEDURE {sp_name}()
 BEGIN
     <SQL QUERY HERE>
 END;;
