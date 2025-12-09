@@ -121,7 +121,8 @@ def get_saved_query_response_controller():
                 "row_data": parsed_rows,
                 "chart_suggestions": chart_suggestions,
                 "created_at": r["created_at"],
-                "created_date": r["created_date"]
+                "created_date": r["created_date"],
+                "actual_created_at": r["actual_created_at"]
             })
 
         return build_response(True, "Chat history loaded", 200, {
