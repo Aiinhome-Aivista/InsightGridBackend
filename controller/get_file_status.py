@@ -2,9 +2,10 @@ from flask import request
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 
+
 def get_file_status_controller():
     try:
-        body = request.get_json() or {}
+        body = request.get_json()
 
         created_by = body.get("created_by")
         session_id = body.get("session_id")
@@ -28,9 +29,7 @@ def get_file_status_controller():
         cur.close()
         con.close()
 
-        # --------------------------------------------
-        # NO DATA FOUND CASE
-        # --------------------------------------------
+        # NO DATA FOUND
         if not result:
             return build_response(
                 False,
@@ -39,10 +38,25 @@ def get_file_status_controller():
                 data=[],
                 status="failed"
             )
+        # if not result:
+        #     return build_response(
+        #         True,
+        #         "No metadata yet, default pending status",
+        #         200,
+        #         data=[{
+        #             "file_id": None,
+        #             "file_name": None,
+        #             "table_name": None,
+        #             "total_rows": 0,
+        #             "total_columns": 0,
+        #             "table_extraction_status": "pending",
+        #             "column_extraction_status": "pending",
+        #             "data_insights_status": "pending"
+        #         }],
+        #         status="success"
+        #     )
 
-        # --------------------------------------------
         # SUCCESS RESPONSE
-        # --------------------------------------------
         return build_response(
             True,
             "Status fetched successfully",
