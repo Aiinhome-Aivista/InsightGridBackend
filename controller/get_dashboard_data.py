@@ -13,44 +13,59 @@ def get_dashboard_data_controller():
 
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        #  VALIDATE SESSION ID & created_by
-        # -----------------------------------
+
+        # ----------------------------------------------------------
+        # VALIDATE session_id + created_by with users table
+        # ----------------------------------------------------------
         cursor.execute(
-            "SELECT user_id, session_id FROM users WHERE session_id = %s AND user_id = %s LIMIT 1",
+            """
+            SELECT user_id 
+            FROM users 
+            WHERE session_id = %s 
+              AND user_id = %s 
+            LIMIT 1
+            """,
             (session_id, created_by)
         )
-        session_row = cursor.fetchone()
 
-        if not session_row:
+        if not cursor.fetchone():
             cursor.close()
             db.close()
-            return build_response(
-                False,
-                "Invalid session_id or created_by",
-                400
-            )
+            return build_response(False, "Invalid session_id or created_by", 400)
 
-
-        cursor.callproc("sp_get_dashboard_data", (created_by,))
+        # ----------------------------------------------------------
+        # CALL STORED PROCEDURE
+        # ----------------------------------------------------------
+        cursor.callproc("sp_get_dashboard_data", (session_id, created_by))
 
         result_sets = []
         for result in cursor.stored_results():
-            result_sets.append(result.fetchall())  # list of 6 lists
+            result_sets.append(result.fetchall())
 
         cursor.close()
-        conn.close()
+        db.close()
 
-        # SAFE EXTRACTION
+        # ----------------------------------------------------------
+        # SAFE EXTRACTOR
+        # ----------------------------------------------------------
+        def safe_get(rs_list, key, default=0):
+            if rs_list and len(rs_list) > 0:
+                return rs_list[0].get(key, default)
+            return default
+
+        # ----------------------------------------------------------
+        # FINAL RESPONSE MAPPING (6 result sets)
+        # ----------------------------------------------------------
         dashboard_data = {
-            "total_uploaded_files": result_sets[0][0].get("total_uploaded_files", 0),
-            "total_extracted_files": result_sets[1][0].get("table_extract_status", 0),
-            "total_reports_generated": result_sets[2][0].get("total_reports_generated", 0),
-            "total_queries": result_sets[3][0].get("total_queries", 0),
-            "working_queries": result_sets[4][0].get("working_queries", 0),
-            "latest_file": result_sets[5][0] if len(result_sets[5]) > 0 else None
+            "total_uploaded_files": safe_get(result_sets[0], "total_uploaded_files"),
+            "total_extracted_files": safe_get(result_sets[1], "table_extract_status"),
+            "total_reports_generated": safe_get(result_sets[2], "total_reports_generated"),
+            "total_queries": safe_get(result_sets[3], "total_queries"),
+            "working_queries": safe_get(result_sets[4], "working_queries"),
+            "latest_file": result_sets[5][0] if len(result_sets) > 5 and len(result_sets[5]) > 0 else None
         }
 
-        return build_response(True, "Dashboard data retrieved", 200, data=dashboard_data)
+        return build_response(True, "Dashboard data retrieved", 200, dashboard_data)
 
     except Exception as e:
-        return build_response(False, "Failed to retrieve dashboard data", 500, data={"error": str(e)})
+        return build_response(False, "Failed to retrieve dashboard data", 500, {"error": str(e)})

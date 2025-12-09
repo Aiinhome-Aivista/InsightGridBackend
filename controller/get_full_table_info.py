@@ -12,7 +12,7 @@ def get_full_table_info_controller():
             return build_response(False, "created_by & session_id required", 400)
 
         db = get_db_connection()
-        cur = db.cursor(dictionary=True)
+        cursor = db.cursor(dictionary=True)
         #  VALIDATE SESSION ID & created_by
         # -----------------------------------
         cursor.execute(
@@ -32,8 +32,8 @@ def get_full_table_info_controller():
             )
 
         # CALL STORED PROCEDURE
-        cur.callproc("sp_get_full_table_info", [created_by, session_id])
-        results = list(cur.stored_results())
+        cursor.callproc("sp_get_full_table_info", [created_by, session_id])
+        results = list(cursor.stored_results())
 
         # ----------------------
         # 1️⃣ TABLE LIST
@@ -76,7 +76,7 @@ def get_full_table_info_controller():
             table_data_map[tbl] = c2.fetchall()
             c2.close()
 
-        cur.close()
+        cursor.close()
         db.close()
 
         # ----------------------

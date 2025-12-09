@@ -8,7 +8,7 @@ from controller.get_file_status import get_file_status_controller
 from controller.get_full_table_info import get_full_table_info_controller
 from controller.get_dashboard_data import get_dashboard_data_controller
 from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endpoint_controller
-
+from controller.query_save import query_save_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -50,6 +50,10 @@ def chat_endpoint_route():
 @app.route("/execute_sql", methods=["POST"])
 def execute_sql_endpoint_route():
     return execute_sql_endpoint_controller()
+
+@app.route("/query_save", methods=["POST"])
+def query_save_route():
+    return query_save_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":

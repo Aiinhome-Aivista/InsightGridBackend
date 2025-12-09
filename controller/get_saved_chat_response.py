@@ -8,65 +8,6 @@ from model.llm_client import call_llm
 import os
 import requests
 
-def call_mistral_llm(system_instruction: str, user_prompt: str) -> str:
-    api_key = os.getenv("MISTRAL_API_KEY", "")
-
-    url = "https://api.mistral.ai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "mistral-tiny",
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 0.1
-    }
-
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=40)
-        r.raise_for_status()
-        data = r.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("LLM ERROR:", e)
-        return "[LLM ERROR] Unable to generate response."
-
-# def get_chat_history_controller():
-#     try:
-#         data = request.get_json()
-
-#         session_id = data.get("session_id")
-#         session_name = data.get("session_name")
-#         file_name = data.get("file_name")
-
-#         if not session_id or not session_name or not file_name:
-#             return build_response(False, "Missing required fields", 400)
-
-#         conn = get_db_connection()
-#         cursor = conn.cursor(dictionary=True)
-
-#         cursor.callproc("sp_get_chat_history", [
-#             session_id,
-#             session_name,
-#             file_name
-#         ])
-
-#         result = []
-#         for rs in cursor.stored_results():
-#             result = rs.fetchall()
-
-#         cursor.close()
-#         conn.close()
-
-#         return build_response(True, "Chat history loaded", 200, data=result)
-
-#     except Exception as e:
-#         return build_response(False, f"Server Error: {str(e)}", 500)
-
 # ---------------------------------------------------------
 # LLM — Chart Suggestion (based on table rows)
 # ---------------------------------------------------------
@@ -151,7 +92,7 @@ Here is the data:
 """
 
     try:
-        llm_output = call_mistral_llm(system_instruction, user_prompt)
+        llm_output = call_llm(system_instruction, user_prompt)
         llm_output = re.sub(r"```json|```", "", llm_output).strip()
         return json.loads(llm_output)
     except Exception as e:
@@ -166,15 +107,39 @@ Here is the data:
 # ---------------------------------------------------------
 def get_chat_history_by_user_controller():
     try:
-        data = request.get_json()
-        created_by = data.get("created_by")
+        body = request.get_json()
+        created_by = body.get("created_by")
+        session_id = body.get("session_id")
+   
+        
+        if not created_by or not session_id:
+            return build_response(False, "created_by & session_id required", 400)
 
-        if not created_by:
-            return build_response(False, "created_by is required", 400)
 
         # Fetch chat history
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        
+        
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        #  VALIDATE SESSION ID & created_by
+        # -----------------------------------
+        cursor.execute(
+            "SELECT user_id, session_id FROM users WHERE session_id = %s AND user_id = %s LIMIT 1",
+            (session_id, created_by)
+        )
+        session_row = cursor.fetchone()
+
+        if not session_row:
+            cursor.close()
+            db.close()
+            return build_response(
+                False,
+                "Invalid session_id or created_by",
+                400
+            )
+        
         cursor.callproc("sp_get_chat_history_by_user", [created_by])
 
         rows = []

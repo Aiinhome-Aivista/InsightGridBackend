@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 from model.llm_client import call_llm
+from helper.helperFunctions import format_file_size
 
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -94,8 +95,9 @@ def upload_and_insights_controller():
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             file.save(filepath)
 
-            file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
-
+            # file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
+            file_size_bytes = os.path.getsize(filepath)
+            file_size_mb = format_file_size(file_size_bytes)
             # --------------------------------------------------------
             # READ CSV
             # --------------------------------------------------------
