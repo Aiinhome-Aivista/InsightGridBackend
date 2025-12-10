@@ -231,12 +231,12 @@ def run_select_query(select_query):
 
         return True, {
             "columns": column_names,
-            "rows": rows
+            "rows": rows,
+            "total_rows": len(rows)
         }, "OK"
 
     except Exception as e:
         return False, None, str(e)
-
 
 def execute_sql_endpoint_controller():
     try:
@@ -255,7 +255,15 @@ def execute_sql_endpoint_controller():
         success, results, msg = run_select_query(select_query)
 
         if success:
-            return build_response(True, "Success", 200, results)
+            # return build_response(True, "Success", 200, results)
+            total = results.get("total_rows", 0)
+
+            if total == 0:
+                msg = "Query executed successfully, but no data found."
+            else:
+                msg = f"Successfully fetched {total} rows."
+
+            return build_response(True, msg, 200, results)
 
         return build_response(False, msg, 400)
 
