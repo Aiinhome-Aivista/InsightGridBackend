@@ -113,6 +113,12 @@ COLUMN RULES:
 - Never invent new columns.
 - Always prefix columns with table name.
 - Follow ONLY_FULL_GROUP_BY rules.
+IMPLICIT FILTER RULES:
+- If user gives a column name followed by a value without specifying an operator 
+  (e.g., 'name Ali', 'customer Ali', 'status pending'),
+  automatically convert it into SQL using LIKE '%value%'.
+- Do not output explanation or reasoning; only generate SQL inside the stored procedure.
+
 ------------------------------------
 """
 
@@ -169,44 +175,68 @@ def extract_select_query(ai_response):
     return None  # if not found
 
 
-def run_select_query(sql_query):
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+# def run_select_query(sql_query):
+#     conn = get_db_connection()
+#     cursor = conn.cursor(dictionary=True)
 
+#     try:
+#         start_time = time.time()
+
+#         query = sql_query.strip()
+#         query = re.sub(r"```sql|```", "", query, flags=re.IGNORECASE).strip()
+
+#         # BLOCK unsafe operations
+#         forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "TRUNCATE"]
+#         if any(query.upper().startswith(k) for k in forbidden_keywords):
+#             return False, None, "Only SELECT statements are allowed."
+
+#         if not query.upper().startswith("SELECT"):
+#             return False, None, "Query must start with SELECT."
+
+#         cursor.execute(query)
+#         rows = cursor.fetchall()
+
+#         end_time = time.time()
+#         elapsed = end_time - start_time
+
+#         result = {
+#             "rows": rows,
+#             "total_rows": len(rows),
+#             "execution_time": format_execution_time(elapsed)
+#         }
+
+#         return True, result, "Success"
+
+#     except Exception as e:
+#         return False, None, f"SQL Execution Error: {e}"
+
+#     finally:
+#         cursor.close()
+#         conn.close()
+
+
+def run_select_query(select_query):
     try:
-        start_time = time.time()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-        query = sql_query.strip()
-        query = re.sub(r"```sql|```", "", query, flags=re.IGNORECASE).strip()
-
-        # BLOCK unsafe operations
-        forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "TRUNCATE"]
-        if any(query.upper().startswith(k) for k in forbidden_keywords):
-            return False, None, "Only SELECT statements are allowed."
-
-        if not query.upper().startswith("SELECT"):
-            return False, None, "Query must start with SELECT."
-
-        cursor.execute(query)
+        cursor.execute(select_query)
         rows = cursor.fetchall()
 
-        end_time = time.time()
-        elapsed = end_time - start_time
+        # Extract column names even if no rows
+        column_names = [desc[0] for desc in cursor.description]
 
-        result = {
-            "rows": rows,
-            "total_rows": len(rows),
-            "execution_time": format_execution_time(elapsed)
-        }
-
-        return True, result, "Success"
-
-    except Exception as e:
-        return False, None, f"SQL Execution Error: {e}"
-
-    finally:
         cursor.close()
         conn.close()
+
+        return True, {
+            "columns": column_names,
+            "rows": rows
+        }, "OK"
+
+    except Exception as e:
+        return False, None, str(e)
+
 
 def execute_sql_endpoint_controller():
     try:
