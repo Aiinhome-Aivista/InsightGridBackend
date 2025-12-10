@@ -10,6 +10,7 @@ from controller.get_dashboard_data import get_dashboard_data_controller
 from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endpoint_controller
 from controller.query_save import query_save_controller
 from controller.get_saved_query_response import get_saved_query_response_controller
+from controller.delete_upload_file import delete_uploaded_file_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -58,7 +59,11 @@ def query_save_route():
 
 @app.route("/get_saved_query_response", methods=["POST"])
 def get_saved_query_response_route():
-    return get_saved_query_response_controller()    
+    return get_saved_query_response_controller()  
+
+@app.route("/delete_uploaded_file", methods=["POST"])
+def delete_uploaded_file_route():
+    return delete_uploaded_file_controller()  
 
 
 # Run the Flask Server
