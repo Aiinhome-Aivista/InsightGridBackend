@@ -11,6 +11,7 @@ from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endp
 from controller.query_save import query_save_controller
 from controller.get_saved_query_response import get_saved_query_response_controller
 from controller.delete_upload_file import delete_uploaded_file_controller
+from controller.upload_filebkp import upload_and_insights_controller_new
 app = Flask(__name__)
 
 CORS(app)
@@ -36,6 +37,9 @@ def get_file_status_route():
 def upload_and_insights_route():
     return upload_and_insights_controller()
 
+@app.route("/upload_files_new", methods=["POST"])
+def upload_and_insights_new_route():
+    return upload_and_insights_controller_new()
 
 @app.route("/get_full_table_info", methods=["POST"])
 def get_full_table_info_route():
