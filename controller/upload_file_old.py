@@ -55,7 +55,7 @@ def _make_row_hash(row_values):
     return hashlib.md5(s.encode()).hexdigest()
 
 
-def upload_and_insights_controller_new():
+def upload_and_insights_old_controller():
     try:
         session_id = request.form.get("session_id")
         created_by = request.form.get("created_by")

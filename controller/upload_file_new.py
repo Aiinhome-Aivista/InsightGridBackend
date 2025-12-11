@@ -1528,7 +1528,7 @@ def fetch_existing_user_tables_with_schema(cursor, session_id, created_by):
 # -------------------------
 # Main single-endpoint handler
 # -------------------------
-def upload_and_insights_controller():
+def upload_and_insights_new_controller():
     try:
         # parse payload
         if request.content_type and request.content_type.startswith("multipart"):

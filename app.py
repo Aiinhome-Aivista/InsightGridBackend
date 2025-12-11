@@ -3,7 +3,7 @@ from flask_cors import CORS
 from database.dbConnection import get_db_connection
 from controller.register import register_controller
 from controller.login import login_controller
-from controller.upload_file import upload_and_insights_controller
+from controller.upload_file_old import upload_and_insights_old_controller
 from controller.get_file_status import get_file_status_controller
 from controller.get_full_table_info import get_full_table_info_controller
 from controller.get_dashboard_data import get_dashboard_data_controller
@@ -11,7 +11,7 @@ from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endp
 from controller.query_save import query_save_controller
 from controller.get_saved_query_response import get_saved_query_response_controller
 from controller.delete_upload_file import delete_uploaded_file_controller
-from controller.upload_filebkp import upload_and_insights_controller_new
+from controller.upload_file_new import upload_and_insights_new_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -34,12 +34,12 @@ def get_file_status_route():
     return get_file_status_controller()
 
 @app.route("/upload_files", methods=["POST"])
-def upload_and_insights_route():
-    return upload_and_insights_controller()
+def upload_and_insights_old_route():
+    return upload_and_insights_old_controller()
 
 @app.route("/upload_files_new", methods=["POST"])
 def upload_and_insights_new_route():
-    return upload_and_insights_controller_new()
+    return upload_and_insights_new_controller()
 
 @app.route("/get_full_table_info", methods=["POST"])
 def get_full_table_info_route():
