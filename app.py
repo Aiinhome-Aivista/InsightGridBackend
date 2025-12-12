@@ -12,6 +12,7 @@ from controller.query_save import query_save_controller
 from controller.get_saved_query_response import get_saved_query_response_controller
 from controller.delete_upload_file import delete_uploaded_file_controller
 from controller.upload_file_new import upload_and_insights_new_controller
+from controller.get_uploaded_table_with_tabledata import get_uploaded_table_with_tabledata_controller
 app = Flask(__name__)
 
 CORS(app)
@@ -67,7 +68,11 @@ def get_saved_query_response_route():
 
 @app.route("/delete_uploaded_file", methods=["POST"])
 def delete_uploaded_file_route():
-    return delete_uploaded_file_controller()  
+    return delete_uploaded_file_controller() 
+
+@app.route("/get_uploaded_table_with_tabledata", methods=["POST"])
+def get_uploaded_table_with_tabledata_route():     
+    return get_uploaded_table_with_tabledata_controller() 
 
 
 # Run the Flask Server
