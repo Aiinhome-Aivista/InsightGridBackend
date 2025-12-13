@@ -49,7 +49,7 @@ def save_report_controller():
             None   # OUT param
         ]
 
-        # result = cur.callproc("sp_save_or_update_report", args)
+        result = cur.callproc("sp_save_or_update_report", args)
         # action = result[-1]   # INSERT / UPDATE / EXISTS
         cur.execute("SELECT @_sp_save_or_update_report_6 AS action")
         action = cur.fetchone()["action"]
