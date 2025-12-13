@@ -35,7 +35,8 @@ def save_report_controller():
         if not row:
             return build_response(False, "Invalid query_history_id", 404)
 
-        rows_effected = row[0]
+        rows_effected = row["rows_effected"]
+
 
         # Call SP (save or update)
         args = [
@@ -45,11 +46,13 @@ def save_report_controller():
             report_name,
             query_history_id,
             rows_effected,
-            ""   # OUT param
+            None   # OUT param
         ]
 
-        result = cur.callproc("sp_save_or_update_report", args)
-        action = result[-1]   # INSERT / UPDATE / EXISTS
+        # result = cur.callproc("sp_save_or_update_report", args)
+        # action = result[-1]   # INSERT / UPDATE / EXISTS
+        cur.execute("SELECT @_sp_save_or_update_report_6 AS action")
+        action = cur.fetchone()["action"]
 
         conn.commit()
         cur.close()
