@@ -1,6 +1,4 @@
-import os
-import uuid
-import json
+
 from flask import request
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response  
@@ -10,7 +8,7 @@ def save_report_controller():
         data = request.get_json()
 
         session_id = data.get("session_id")
-        user_id = data.get("user_id")
+        user_id = data.get("created_by")
         report_id = data.get("report_id")
         report_name = data.get("report_name")
         query_history_id = data.get("query_history_id")
@@ -58,7 +56,7 @@ def report_list_controller():
     try:
         data = request.get_json() or {}
         session_id = data.get("session_id")
-        user_id = data.get("user_id")
+        user_id = data.get("created_by")
 
         if not session_id or not user_id:
             return build_response(False, "session_id & user_id required", 400)
