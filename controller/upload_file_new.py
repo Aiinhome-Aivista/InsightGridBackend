@@ -830,8 +830,10 @@ def upload_and_insights_new_controller():
             try:
                 upsert_df_to_table(cur3, table_name, df_clean)
                 db3.commit()
+                insert_status = "done"
             except Exception as e:
                 db3.rollback()
+                insert_status = "failed"
                 cur3.close(); db3.close()
                 cur.close(); db.close()
                 return build_response(False, f"Insert failed: {str(e)}", 500)
@@ -863,7 +865,8 @@ def upload_and_insights_new_controller():
                     "done",
                     "done",
                     insights_json,
-                    insight_status
+                    insight_status,
+                    insert_status  
                 ])
 
                 sp_result = None
