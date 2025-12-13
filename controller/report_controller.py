@@ -102,6 +102,7 @@ def report_list_controller():
                 "row_affected": r["row_affected"],
                 "group_by": [],
                 "created_at": r["created_at"],
+                "actual_created_at": r["actual_created_at"],
                 "query": {
                     "query_id": r["query_id"],
                     "query_name": r["query_title"],
