@@ -842,7 +842,7 @@ def upload_and_insights_new_controller():
             db3.commit()
             try:
                 upsert_df_to_table(cur3, table_name, df_clean)
-                db3.commit()
+                # db3.commit()
                 # ==============================
                 # MARK INSERT SUCCESS → done
                 # ==============================
