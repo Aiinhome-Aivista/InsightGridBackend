@@ -3,6 +3,35 @@ from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 import json
 
+
+import re
+
+def extract_table_names_from_ai_response(ai_response: str):
+    if not ai_response:
+        return []
+
+    pattern = re.compile(
+        r"""
+        \bfrom\s+`?([a-zA-Z0-9_]+)`? |
+        \bjoin\s+`?([a-zA-Z0-9_]+)`? |
+        \bupdate\s+`?([a-zA-Z0-9_]+)`? |
+        \binto\s+`?([a-zA-Z0-9_]+)`?
+        """,
+        re.IGNORECASE | re.VERBOSE
+    )
+
+    matches = pattern.findall(ai_response)
+
+    tables = set()
+    for m in matches:
+        for t in m:
+            if t:
+                tables.add(t.lower())
+
+    return list(tables)
+
+
+
 def query_save_controller():
     try:
         data = request.get_json()
@@ -20,6 +49,9 @@ def query_save_controller():
         if not all([query_title, user_query, ai_response, session_id, created_by]):
             return build_response(False, "Missing required fields", 400)
         
+        table_names = extract_table_names_from_ai_response(ai_response)
+        table_names_json = json.dumps(table_names) if table_names else None
+
         row_data_json = json.dumps(row_data) if row_data else None
 
         conn = get_db_connection()
@@ -36,6 +68,7 @@ def query_save_controller():
         # Call stored procedure
         cursor.callproc("sp_save_query", [
             query_title,
+            table_names_json,  
             user_query,
             ai_response,
             rows_effected,
