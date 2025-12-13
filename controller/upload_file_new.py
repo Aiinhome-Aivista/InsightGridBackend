@@ -827,13 +827,60 @@ def upload_and_insights_new_controller():
             db3 = get_db_connection()
             cur3 = db3.cursor(dictionary=True)
 
+            # ==============================
+            # MARK INSERT STARTED → pending
+            # ==============================
+            cur3.execute("""
+                UPDATE uploaded_files
+                SET data_insert_status = 'pending',
+                    updated_at = NOW()
+                WHERE session_id=%s
+                AND created_by=%s
+                AND table_name=%s
+            """, (session_id, created_by, table_name))
+
+            db3.commit()
             try:
                 upsert_df_to_table(cur3, table_name, df_clean)
                 db3.commit()
+                # ==============================
+                # MARK INSERT SUCCESS → done
+                # ==============================
+                cur3.execute("""
+                    UPDATE uploaded_files
+                    SET data_insert_status = 'done',
+                        updated_at = NOW()
+                    WHERE session_id=%s
+                    AND created_by=%s
+                    AND table_name=%s
+                """, (session_id, created_by, table_name))
+
+                db3.commit()
+
+            # except Exception as e:
+            #     db3.rollback()
+            #     cur3.close(); db3.close()
+            #     cur.close(); db.close()
+            #     return build_response(False, f"Insert failed: {str(e)}", 500)
             except Exception as e:
                 db3.rollback()
-                cur3.close(); db3.close()
-                cur.close(); db.close()
+
+                cur3.execute("""
+                    UPDATE uploaded_files
+                    SET data_insert_status = 'failed',
+                        updated_at = NOW()
+                    WHERE session_id=%s
+                    AND created_by=%s
+                    AND table_name=%s
+                """, (session_id, created_by, table_name))
+
+                db3.commit()
+
+                cur3.close()
+                db3.close()
+                cur.close()
+                db.close()
+
                 return build_response(False, f"Insert failed: {str(e)}", 500)
 
             # --------------------------------------
