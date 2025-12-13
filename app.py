@@ -84,6 +84,9 @@ def report_save_route():
 def report_list_route():
     return report_list_controller()
 
+# @app.route("/report_update", methods=["POST"])
+# def report_updated_route():
+#     return update_report_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
