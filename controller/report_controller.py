@@ -13,12 +13,13 @@ def save_report_controller():
         report_name = data.get("report_name")
         query_history_id = data.get("query_history_id")
 
-        if not all([session_id, user_id, report_id, query_history_id]):
+        if not all([session_id, user_id, report_id, report_name, query_history_id]):
             return build_response(False, "Missing required fields", 400)
 
         conn = get_db_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor()
 
+        # Validate session + user
         cur.execute("""
             SELECT 1 FROM users
             WHERE session_id=%s AND user_id=%s
@@ -26,31 +27,44 @@ def save_report_controller():
         if not cur.fetchone():
             return build_response(False, "Invalid session or user", 401)
 
+        # Fetch row_affected
         cur.execute("""
             SELECT rows_effected FROM query_history WHERE id=%s
         """, (query_history_id,))
-        q = cur.fetchone()
-        if not q:
+        row = cur.fetchone()
+        if not row:
             return build_response(False, "Invalid query_history_id", 404)
 
-        cur.callproc("sp_save_report", [
+        rows_effected = row[0]
+
+        # Call SP (save or update)
+        args = [
             report_id,
             session_id,
             user_id,
             report_name,
             query_history_id,
-            q["rows_effected"]
-        ])
+            rows_effected,
+            ""   # OUT param
+        ]
+
+        result = cur.callproc("sp_save_or_update_report", args)
+        action = result[-1]   # INSERT / UPDATE / EXISTS
 
         conn.commit()
         cur.close()
         conn.close()
 
+        if action == "EXISTS":
+            return build_response(True, "Report already exists", 200)
+
+        if action == "UPDATE":
+            return build_response(True, "Report updated successfully", 200)
+
         return build_response(True, "Report saved successfully", 200)
 
     except Exception as e:
         return build_response(False, "Server Error", 500, {"error": str(e)})
-
 
 def report_list_controller():
     try:
