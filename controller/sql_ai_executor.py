@@ -5,6 +5,83 @@ from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 from model.llm_client import call_llm
 import time
+COLUMN_SYNONYMS = {
+    "blood group": "blood_group",
+    "bloodgroup": "blood_group",
+    "bg": "blood_group",
+    "dept": "department_id",
+    "department": "department_id"
+}
+
+def extract_tables_and_columns_from_query(user_query, schema_context):
+    words = re.findall(r"\b[a-zA-Z_]+\b", user_query.lower())
+
+    schema_tables = set(schema_context.keys())
+    schema_columns = {
+        col.lower(): table
+        for table, cols in schema_context.items()
+        for col in cols
+    }
+
+    mentioned_tables = set()
+    mentioned_columns = []
+
+    # ---- detect table mentions ----
+    for i, w in enumerate(words):
+        # pattern: "from department table"
+        if w == "table" and i > 0:
+            mentioned_tables.add(words[i - 1])
+
+        # direct table name mention
+        if w in schema_tables:
+            mentioned_tables.add(w)
+
+    # ---- detect column mentions ----
+    for w in words:
+        if w in schema_columns:
+            mentioned_columns.append((w, schema_columns[w]))
+
+    return mentioned_tables, mentioned_columns
+
+def validate_tables_and_columns_pre_llm(user_query, schema_context):
+    mentioned_tables, mentioned_columns = extract_tables_and_columns_from_query(
+        user_query, schema_context
+    )
+
+    errors = []
+
+    # table validation
+    for t in mentioned_tables:
+        if t not in schema_context:
+            errors.append(f"Table '{t}' does not exist")
+
+    # column validation (STRICT)
+    for col, table in mentioned_columns:
+        if col not in [c.lower() for c in schema_context.get(table, [])]:
+            errors.append(f"Column '{col}' does not exist in table '{table}'")
+
+    # 🚨 IMPORTANT: if user mentioned a column via synonym but it's not in schema
+    text = user_query.lower()
+    for phrase, real_col in COLUMN_SYNONYMS.items():
+        if phrase in text:
+            found = False
+            for cols in schema_context.values():
+                if real_col in [c.lower() for c in cols]:
+                    found = True
+            if not found:
+                errors.append(f"Column '{real_col}' does not exist in table 'students'")
+
+    if errors:
+        return False, list(set(errors))
+
+    return True, None
+
+
+def is_safe_select(sql):
+    forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE"]
+    u = sql.upper()
+    return u.startswith("SELECT") and not any(k in u for k in forbidden)
+
 
 def ask_llm_for_sp_name(user_query):
     prompt = f"""
@@ -65,20 +142,32 @@ def chat_endpoint_controller():
 
         # ======================================================
         # STEP 2 — Fetch FULL TABLE DATA + schema
-        # ======================================================
-        full_table_data = {}
+        # ===================== full_table_data = {}
         schema_context = {}
 
         for tname in table_names:
             cursor.execute(f"SELECT * FROM `{tname}`")
             rows = cursor.fetchall()
 
-            full_table_data[tname] = rows
             schema_context[tname] = list(rows[0].keys()) if rows else []
 
         cursor.close()
         conn.close()
 
+    
+        # ======================================================
+        # STEP 2.5 — PRE-LLM schema validation
+        # ======================================================
+        ok, errors = validate_tables_and_columns_pre_llm(user_query, schema_context)
+
+        if not ok:
+            return build_response(
+                False,
+                "; ".join(errors),
+                400
+            )
+    
+    
         # ======================================================
         # STEP 3 — Build schema JSON for LLM
         # ======================================================
@@ -164,7 +253,9 @@ def extract_select_query(ai_response):
 
     # Remove CREATE PROCEDURE and BEGIN / END block
     clean = re.sub(r"CREATE\s+PROCEDURE[\s\S]*?BEGIN", "", clean, flags=re.IGNORECASE)
-    clean = re.sub(r"END\s*;?", "", clean, flags=re.IGNORECASE)
+    # clean = re.sub(r"END\s*;?", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\bEND\b\s*;?", "", clean, flags=re.IGNORECASE)
+
 
     # Extract only SELECT query
     match = re.search(r"(SELECT[\s\S]*?);", clean, flags=re.IGNORECASE)
@@ -215,15 +306,44 @@ def extract_select_query(ai_response):
 #         conn.close()
 
 
+# def run_select_query(select_query):
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(dictionary=True)
+
+#         cursor.execute(select_query)
+#         rows = cursor.fetchall()
+
+#         # Extract column names even if no rows
+#         column_names = [desc[0] for desc in cursor.description]
+
+#         cursor.close()
+#         conn.close()
+
+#         return True, {
+#             "columns": column_names,
+#             "rows": rows,
+#             "total_rows": len(rows)
+#         }, "OK"
+
+#     except Exception as e:
+#         return False, None, str(e)
+
+
+
 def run_select_query(select_query):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        start_time = time.time()   # ⏱️ START
+
         cursor.execute(select_query)
         rows = cursor.fetchall()
 
-        # Extract column names even if no rows
+        end_time = time.time()     # ⏱️ END
+        elapsed = end_time - start_time
+
         column_names = [desc[0] for desc in cursor.description]
 
         cursor.close()
@@ -232,11 +352,46 @@ def run_select_query(select_query):
         return True, {
             "columns": column_names,
             "rows": rows,
-            "total_rows": len(rows)
+            "total_rows": len(rows),
+            "execution_time": format_execution_time(elapsed)  # ✅ HERE
         }, "OK"
 
     except Exception as e:
         return False, None, str(e)
+
+
+# def execute_sql_endpoint_controller():
+#     try:
+#         ai_sql = request.json.get("sql_query")
+
+#         if not ai_sql:
+#             return build_response(False, "Missing sql_query", 400)
+
+#         # Extract SELECT query from stored procedure
+#         select_query = extract_select_query(ai_sql)
+
+#         if not select_query:
+#             return build_response(False, "Failed to extract SELECT query", 400)
+
+#         # Run actual extracted SELECT
+#         success, results, msg = run_select_query(select_query)
+
+#         if success:
+#             # return build_response(True, "Success", 200, results)
+#             total = results.get("total_rows", 0)
+
+#             if total == 0:
+#                 msg = "Query executed successfully, but no data found."
+#             else:
+#                 msg = f"Successfully fetched {total} rows."
+
+#             return build_response(True, msg, 200, results)
+
+#         return build_response(False, msg, 400)
+
+#     except Exception as e:
+#         return build_response(False, f"Server Error: {e}", 500)
+
 
 def execute_sql_endpoint_controller():
     try:
@@ -245,24 +400,20 @@ def execute_sql_endpoint_controller():
         if not ai_sql:
             return build_response(False, "Missing sql_query", 400)
 
-        # Extract SELECT query from stored procedure
         select_query = extract_select_query(ai_sql)
-
         if not select_query:
             return build_response(False, "Failed to extract SELECT query", 400)
 
-        # Run actual extracted SELECT
+        # ✅ 1. only SELECT allowed
+        if not is_safe_select(select_query):
+            return build_response(False, "Only SELECT queries are allowed", 400)
+        # ✅ 4. execute
         success, results, msg = run_select_query(select_query)
 
         if success:
-            # return build_response(True, "Success", 200, results)
             total = results.get("total_rows", 0)
-
-            if total == 0:
-                msg = "Query executed successfully, but no data found."
-            else:
-                msg = f"Successfully fetched {total} rows."
-
+            msg = "Query executed successfully, but no data found." if total == 0 \
+                  else f"Successfully fetched {total} rows."
             return build_response(True, msg, 200, results)
 
         return build_response(False, msg, 400)

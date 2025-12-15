@@ -35,40 +35,6 @@ UPLOAD_FOLDER = get_upload_folder()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-
-
-def build_preview_response(file_name, table_name, schema=None, is_existing=False):
-    path = os.path.join(UPLOAD_FOLDER, file_name)
-    if not os.path.exists(path):
-        raise Exception("CSV file missing")
-
-    df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
-    df.columns = clean_column_names(df.columns)
-    df = df.where(pd.notnull(df), None)
-
-    # ---------- NEW TABLE ----------
-    if not is_existing:
-        if not schema:
-            raise Exception("Schema required for new table preview")
-
-        expected_cols = [c["column"] for c in schema]
-
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = None
-
-        df = df[expected_cols]
-
-    # ---------- COMMON ----------
-    df = normalize_boolean_columns(df)
-    df_clean = df.drop_duplicates().dropna(how="all")
-
-    return {
-        "table_name": table_name,
-        "total_rows": df_clean.shape[0],
-        "preview_rows": df_clean.head(5).fillna("").to_dict(orient="records")
-    }
-
 # -------------------------
 # Utilities
 # -------------------------
@@ -692,30 +658,6 @@ def upload_and_insights_new_controller():
 
             # fetch existing tables for UI
             existing = fetch_existing_user_tables_with_schema(cur, session_id, created_by)
-            # --------------------------------------
-            # PHASE 1: Insert metadata as PENDING
-            # --------------------------------------
-            cur.callproc("sp_insert_uploaded_file_new", [
-            session_id,
-            fname,               # ✅ correct
-            suggested_table,     # ✅ correct
-            format_file_size(os.path.getsize(path)),
-            "csv",
-            0,
-            0,
-            created_by,
-            "pending",
-            "pending",
-            "[]",
-            "pending",
-            "pending"
-        ])
-
-
-            for r in cur.stored_results():
-                r.fetchone()
-
-            db.commit()
 
             cur.close(); db.close()
             return build_response(True, "File uploaded", 200, {
@@ -730,151 +672,14 @@ def upload_and_insights_new_controller():
         # --------------------------
         # ACTION: preview
         # --------------------------
-        # --------------------------
-        # ACTION: create_table
-        if action == "create_table":
-            file_name = body.get("file_name")
-            table_name = body.get("table_name")
-            schema = body.get("schema")
-
-            if not file_name or not table_name or not schema:
-                cur.close(); db.close()
-                return build_response(False, "file_name, table_name & schema required", 400)
-
-
-            # ---- CREATE TABLE ----
-            db2 = get_db_connection()
-            cur2 = db2.cursor()
-            try:
-                create_table_ddl(cur2, table_name, schema)
-                db2.commit()
-            except Exception as e:
-                db2.rollback()
-                cur2.close(); db2.close()
-                cur.close(); db.close()
-                return build_response(False, f"Create table failed: {str(e)}", 500)
-
-            cur2.close(); db2.close()
-
-            # ---- PREVIEW (same as preview action) ----
-            try:
-                preview_data = build_preview_response(
-                    file_name=file_name,
-                    table_name=table_name,
-                    schema=schema,
-                    is_existing=False
-                )
-            except Exception as e:
-                cur.close(); db.close()
-                return build_response(False, str(e), 400)
-
-            cur.close(); db.close()
-            return build_response(True, "Table created & preview ready", 200, {
-                **preview_data,
-                "summary_message": f"Table `{table_name}` created successfully."
-            })
-
-          # ACTION: preview
-        # --------------------------
-        # if action == "preview":
-        #     file_name = body.get("file_name")
-        #     table_name = body.get("table_name")
-        #     is_existing = bool(body.get("is_existing", False))
-        #     schema = body.get("schema")  # only for new table preview
-
-        #     if not file_name or not table_name:
-        #         cur.close(); db.close()
-        #         return build_response(False, "file_name and table_name required", 400)
-
-        #     path = os.path.join(UPLOAD_FOLDER, file_name)
-        #     if not os.path.exists(path):
-        #         cur.close(); db.close()
-        #         return build_response(False, "CSV file missing", 400)
-        #     df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
-        #     df.columns = clean_column_names(df.columns)
-        #     df = df.where(pd.notnull(df), None)
-
-        #     # ------------------------------------
-        #     # CASE 1: NEW TABLE PREVIEW (is_existing = false)
-        #     # ------------------------------------
-        #     if not is_existing:
-        #         if not schema:
-        #             cur.close(); db.close()
-        #             return build_response(False, "Schema required for new table preview", 400)
-
-        #         expected_cols = [col["column"] for col in schema]
-
-        #         # Add missing schema columns
-        #         for col in expected_cols:
-        #             if col not in df.columns:
-        #                 df[col] = None
-
-        #         # Remove extra CSV columns
-        #         df = df[expected_cols]
-
-        #         # Convert boolean-like columns to 1/0
-        #         df = normalize_boolean_columns(df)
-
-        #         df_clean = df.drop_duplicates().dropna(how="all")
-
-        #         preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
-        #         total_rows = df_clean.shape[0]
-
-        #         cur.close(); db.close()
-
-        #         return build_response(True, "Preview", 200, {
-        #             "table_name": table_name,
-        #             "total_rows": total_rows,
-        #             "preview_rows": preview_rows
-        #         })
-
-        #     # ------------------------------------
-        #     # CASE 2: EXISTING TABLE PREVIEW
-        #     # ------------------------------------
-        #     df_clean = df.drop_duplicates().dropna(how="all")
-
-        #     csv_cols = [c.lower() for c in df_clean.columns]
-
-        #     cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
-        #     cols = cur.fetchall()
-
-        #     db_cols = [
-        #         c["Field"].lower()
-        #         for c in cols
-        #         if c["Field"].lower() not in ("id", "row_hash")
-        #     ]
-
-        #     missing_in_csv = [c for c in db_cols if c not in csv_cols]
-        #     extra_in_csv = [c for c in csv_cols if c not in db_cols]
-
-        #     if missing_in_csv or extra_in_csv:
-        #         cur.close(); db.close()
-        #         return build_response(False, "Schema mismatch", 400, {
-        #             "missing_in_csv": missing_in_csv,
-        #             "extra_in_csv": extra_in_csv
-        #         })
-
-        #     df_clean = normalize_boolean_columns(df_clean)
-
-        #     preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
-        #     total_rows = df_clean.shape[0]
-
-        #     cur.close(); db.close()
-        #     return build_response(True, "Preview", 200, {
-        #         "table_name": table_name,
-        #         "total_rows": total_rows,
-        #         "preview_rows": preview_rows
-        #     })
-
-
-        # --------------------------
+                # --------------------------
         # ACTION: preview
         # --------------------------
         if action == "preview":
             file_name = body.get("file_name")
             table_name = body.get("table_name")
             is_existing = bool(body.get("is_existing", False))
-            schema = body.get("schema")  # only for new table
+            schema = body.get("schema")  # only for new table preview
 
             if not file_name or not table_name:
                 cur.close(); db.close()
@@ -885,47 +690,49 @@ def upload_and_insights_new_controller():
                 cur.close(); db.close()
                 return build_response(False, "CSV file missing", 400)
 
-            # --------------------------
-            # LOAD CSV
-            # --------------------------
             df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
             df.columns = clean_column_names(df.columns)
             df = df.where(pd.notnull(df), None)
-            df_clean = df.drop_duplicates().dropna(how="all")
 
-            # =====================================================
-            # CASE 1️⃣ : NEW TABLE PREVIEW
-            # =====================================================
+            # ------------------------------------
+            # CASE 1: NEW TABLE PREVIEW (is_existing = false)
+            # ------------------------------------
             if not is_existing:
                 if not schema:
                     cur.close(); db.close()
                     return build_response(False, "Schema required for new table preview", 400)
 
-                expected_cols = [c["column"] for c in schema]
+                expected_cols = [col["column"] for col in schema]
 
-                # add missing columns
+                # Add missing schema columns
                 for col in expected_cols:
-                    if col not in df_clean.columns:
-                        df_clean[col] = None
+                    if col not in df.columns:
+                        df[col] = None
 
-                # remove extra columns
-                df_clean = df_clean[expected_cols]
+                # Remove extra CSV columns
+                df = df[expected_cols]
 
-                df_clean = normalize_boolean_columns(df_clean)
+                # Convert boolean-like columns to 1/0
+                df = normalize_boolean_columns(df)
+
+                df_clean = df.drop_duplicates().dropna(how="all")
 
                 preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
                 total_rows = df_clean.shape[0]
 
                 cur.close(); db.close()
+
                 return build_response(True, "Preview", 200, {
                     "table_name": table_name,
                     "total_rows": total_rows,
                     "preview_rows": preview_rows
                 })
 
-            # =====================================================
-            # CASE 2️⃣ : EXISTING TABLE PREVIEW  ✅
-            # =====================================================
+            # ------------------------------------
+            # CASE 2: EXISTING TABLE PREVIEW
+            # ------------------------------------
+            df_clean = df.drop_duplicates().dropna(how="all")
+
             csv_cols = [c.lower() for c in df_clean.columns]
 
             cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
@@ -940,7 +747,6 @@ def upload_and_insights_new_controller():
             missing_in_csv = [c for c in db_cols if c not in csv_cols]
             extra_in_csv = [c for c in csv_cols if c not in db_cols]
 
-            # ❌ Schema mismatch
             if missing_in_csv or extra_in_csv:
                 cur.close(); db.close()
                 return build_response(False, "Schema mismatch", 400, {
@@ -948,26 +754,25 @@ def upload_and_insights_new_controller():
                     "extra_in_csv": extra_in_csv
                 })
 
-            # ✅ Schema OK → preview + message
             df_clean = normalize_boolean_columns(df_clean)
 
             preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
             total_rows = df_clean.shape[0]
 
             cur.close(); db.close()
-            return build_response(True, "Table already exists.", 200, {
+            return build_response(True, "Preview", 200, {
                 "table_name": table_name,
                 "total_rows": total_rows,
-                "preview_rows": preview_rows,
-                "summary_message": "Table already exists."
+                "preview_rows": preview_rows
             })
+
+
 
         # --------------------------
         # ACTION: insert_data
         # --------------------------
         if action == "insert_data":
             file_name = body.get("file_name")
-            file_name = os.path.basename(file_name)  # ✅ ADD THIS LINE
             table_name = body.get("table_name")
             is_existing = bool(body.get("is_existing", False))
             schema = body.get("schema")  # Only required for new table creation
@@ -999,25 +804,24 @@ def upload_and_insights_new_controller():
             # --------------------------------------
             # NEW TABLE → CREATE TABLE USING UI SCHEMA
             # --------------------------------------
-            # if not is_existing:
-            #     if not schema:
-            #         cur.close(); db.close()
-            #         return build_response(False, "Schema required for new table", 400)
+            if not is_existing:
+                if not schema:
+                    cur.close(); db.close()
+                    return build_response(False, "Schema required for new table", 400)
 
-            #     db2 = get_db_connection()
-            #     cur2 = db2.cursor()
+                db2 = get_db_connection()
+                cur2 = db2.cursor()
 
-            #     try:
-            #         create_table_ddl(cur2, table_name, schema)
-            #         db2.commit()
-            #     except Exception as e:
-            #         db2.rollback()
-            #         cur2.close(); db2.close()
-            #         cur.close(); db.close()
-            #         return build_response(False, f"Create table failed: {str(e)}", 500)
+                try:
+                    create_table_ddl(cur2, table_name, schema)
+                    db2.commit()
+                except Exception as e:
+                    db2.rollback()
+                    cur2.close(); db2.close()
+                    cur.close(); db.close()
+                    return build_response(False, f"Create table failed: {str(e)}", 500)
 
-            #     cur2.close(); db2.close()
-
+                cur2.close(); db2.close()
 
             # --------------------------------------
             # INSERT / UPSERT → both new and existing
@@ -1091,18 +895,14 @@ def upload_and_insights_new_controller():
 
             cur3.close(); db3.close()
             cur.close(); db.close()
-            summary_message = (
-                f"Table `{table_name}` successfully inserted with {total_cols} columns and {total_rows} new rows."
-                if is_existing
-                else f"Table `{table_name}` successfully created with {total_cols} columns and {total_rows} rows."
-            )
+
             return build_response(True, "Data inserted", 200, {
                 "file_id": file_id,
                 "file_status": status_flag,
                 "table_name": table_name,
                 "total_rows": total_rows,
                 "total_columns": total_cols,
-                "summary_message": summary_message
+                "summary_message": f"Table `{table_name}` successfully created with {total_cols} columns and {total_rows} rows."
             })
 
 

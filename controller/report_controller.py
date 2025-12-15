@@ -17,8 +17,8 @@ def save_report_controller():
             return build_response(False, "Missing required fields", 400)
 
         conn = get_db_connection()
-        cur = conn.cursor()
-
+        # cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         # Validate session + user
         cur.execute("""
             SELECT 1 FROM users
@@ -103,6 +103,7 @@ def report_list_controller():
                 "group_by": [],
                 "created_at": r["created_at"],
                 "actual_created_at": r["actual_created_at"],
+                "actual_created_date": r["actual_created_date"],
                 "query": {
                     "query_id": r["query_id"],
                     "query_name": r["query_title"],
