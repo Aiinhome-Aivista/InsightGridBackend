@@ -35,6 +35,18 @@ UPLOAD_FOLDER = get_upload_folder()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
+def remove_row_hash(rows):
+    """
+    Remove row_hash key from list of dict rows
+    """
+    clean = []
+    for r in rows:
+        if isinstance(r, dict):
+            r = dict(r)          # safe copy
+            r.pop("row_hash", None)
+        clean.append(r)
+    return clean
+
 
 def normalize_date_columns(df: pd.DataFrame, schema: list):
     """
@@ -96,6 +108,45 @@ def build_preview_response(file_name, table_name, schema=None, is_existing=False
 # -------------------------
 # Utilities
 # -------------------------
+
+# =========================
+# CSV Header Handling
+# =========================
+
+def load_csv(path, has_header: bool):
+    """
+    Load CSV based on header flag
+    """
+    if has_header:
+        return pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+    else:
+        return pd.read_csv(
+            path,
+            dtype=str,
+            encoding="utf-8-sig",
+            header=None      # 🔥 KEY LINE
+        )
+
+
+def apply_default_headers(df: pd.DataFrame):
+    """
+    Assign default column names when file has no header
+    """
+    df.columns = [f"column{i+1}" for i in range(df.shape[1])]
+    return df
+
+
+def validate_header_vs_table(has_header: bool, is_existing: bool):
+    """
+    Business rule validation
+    """
+    if not has_header and is_existing:
+        raise ValueError(
+            "File without header cannot be used with existing table"
+        )
+
+
+
 def to_python(v):
     if isinstance(v, (np.integer, np.int64, np.int32)):
         return int(v)
@@ -237,19 +288,64 @@ def infer_schema_with_llm(df: pd.DataFrame, file_name: str):
         # -----------------------------------
         # LLM PROMPT
         # -----------------------------------
-        prompt = f"""
+#         prompt = f"""
+# You are a Senior MySQL Data Architect.
+# Based on column statistics and sample data, generate a BEST-FIT MySQL schema.
+
+# Return ONLY a JSON array of objects with:
+#   column, type, length(optional), primary(boolean)
+
+# Column stats:
+# {json.dumps(stats, indent=2)}
+
+# Sample rows:
+# {json.dumps(sample, indent=2)}
+# """
+            prompt = f"""
 You are a Senior MySQL Data Architect.
-Based on column statistics and sample data, generate a BEST-FIT MySQL schema.
 
-Return ONLY a JSON array of objects with:
-  column, type, length(optional), primary(boolean)
+Your task:
+Generate a SAFE, PRODUCTION-READY MySQL table schema.
 
-Column stats:
+STRICT RULES (MUST FOLLOW):
+1. Always return VALID MySQL datatypes only.
+2. If datatype is VARCHAR or CHAR:
+   - Length is MANDATORY
+   - Length MUST be <= 255
+   - If unsure, use VARCHAR(255)
+3. Never assign length to:
+   - TEXT, MEDIUMTEXT, LONGTEXT
+   - INT, BIGINT, FLOAT, DOUBLE
+   - DATE, DATETIME, TIME, YEAR
+4. For DECIMAL:
+   - Always use DECIMAL(18,2) unless strong evidence suggests otherwise
+5. BOOLEAN values must be TINYINT(1)
+6. JSON-like values must use JSON datatype
+7. Only ONE column can be PRIMARY KEY
+8. Primary key preference order:
+   uuid > id > *_id > code > number
+9. Never invent columns
+10. Never return NULL or empty column names
+11. Analyze up to FIRST 500 ROWS for better accuracy
+
+OUTPUT FORMAT (IMPORTANT):
+Return ONLY a JSON ARRAY.
+Each object MUST have:
+- column
+- datatype
+- length (ONLY if datatype supports length)
+- primary (true/false)
+
+DO NOT include explanations or markdown.
+
+Column statistics:
 {json.dumps(stats, indent=2)}
 
-Sample rows:
+Sample data (first 500 rows):
 {json.dumps(sample, indent=2)}
 """
+
+
 
         raw = call_llm(prompt).strip().replace("```", "")
         parsed = safe_parse_json(raw)
@@ -422,10 +518,11 @@ def create_table_ddl(cursor, table_name, schema):
         if col_name == auto_inc_col:
             cd += " AUTO_INCREMENT"
         final_defs.append(cd)
-
+# CREATE TABLE IF NOT EXISTS `{table_name}`
     # build ddl
     ddl = f"""
-    CREATE TABLE IF NOT EXISTS `{table_name}` (
+
+    CREATE TABLE `{table_name}`(
         {", ".join(final_defs)},
         row_hash VARCHAR(64),
         PRIMARY KEY({",".join(f"`{c}`" for c in pk_cols)})
@@ -492,33 +589,86 @@ Sample rows:
 # -------------------------
 # Fetch user's existing tables (simple)
 # -------------------------
+# def fetch_existing_user_tables_with_schema(cursor, session_id, created_by):
+#     cursor.execute("""
+#         SELECT DISTINCT table_name FROM uploaded_files
+#         WHERE session_id = %s AND created_by = %s
+#     """, (session_id, created_by))
+#     tables = [r["table_name"] for r in cursor.fetchall()]
+#     existing_list = []
+#     dropdown = []
+#     for t in tables:
+#         try:
+#             cursor.execute(f"SHOW COLUMNS FROM `{t}`")
+#             cols = cursor.fetchall()
+#             schema = []
+#             for c in cols:
+#                 # c expected to be dict-like with keys Field, Type, Key
+#                 type_str = c.get("Type") if isinstance(c, dict) else c[1]
+#                 match = re.match(r"(\w+)(?:\((\d+)\))?", type_str)
+#                 datatype = match.group(1).lower() if match else type_str
+#                 length = int(match.group(2)) if match and match.group(2) else None
+#                 schema.append({"column": c["Field"], "datatype": datatype, "length": length, "primary": c.get("Key") == "PRI"})
+#             existing_list.append({"table_name": t, "schema": schema})
+#             dropdown.append({"label": t, "value": t})
+#         except Exception:
+#             # skip problematic table
+#             continue
+#     return {"existing_tables": existing_list, "table_dropdown": dropdown}
+
 def fetch_existing_user_tables_with_schema(cursor, session_id, created_by):
     cursor.execute("""
-        SELECT DISTINCT table_name FROM uploaded_files
+        SELECT DISTINCT table_name
+        FROM uploaded_files
         WHERE session_id = %s AND created_by = %s
     """, (session_id, created_by))
+
     tables = [r["table_name"] for r in cursor.fetchall()]
     existing_list = []
     dropdown = []
+
     for t in tables:
         try:
             cursor.execute(f"SHOW COLUMNS FROM `{t}`")
             cols = cursor.fetchall()
+
             schema = []
             for c in cols:
-                # c expected to be dict-like with keys Field, Type, Key
-                type_str = c.get("Type") if isinstance(c, dict) else c[1]
+                col_name = c["Field"]
+
+                # 🚫 Hide internal column
+                if col_name.lower() == "row_hash":
+                    continue
+
+                type_str = c.get("Type")
                 match = re.match(r"(\w+)(?:\((\d+)\))?", type_str)
                 datatype = match.group(1).lower() if match else type_str
                 length = int(match.group(2)) if match and match.group(2) else None
-                schema.append({"column": c["Field"], "datatype": datatype, "length": length, "primary": c.get("Key") == "PRI"})
-            existing_list.append({"table_name": t, "schema": schema})
-            dropdown.append({"label": t, "value": t})
-        except Exception:
-            # skip problematic table
-            continue
-    return {"existing_tables": existing_list, "table_dropdown": dropdown}
 
+                schema.append({
+                    "column": col_name,
+                    "datatype": datatype,
+                    "length": length,
+                    "primary": c.get("Key") == "PRI"
+                })
+
+            existing_list.append({
+                "table_name": t,
+                "schema": schema
+            })
+
+            dropdown.append({
+                "label": t,
+                "value": t
+            })
+
+        except Exception:
+            continue
+
+    return {
+        "existing_tables": existing_list,
+        "table_dropdown": dropdown
+    }
 
 # -------------------------
 # Main single-endpoint handler
@@ -570,7 +720,17 @@ def upload_and_insights_new_controller():
            
             # robust CSV load (encoding + delimiter sniff)
             try:
-                df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+                # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+                has_header = body.get("has_header", True)
+
+                df = load_csv(path, has_header)
+
+                if not has_header:
+                    df = apply_default_headers(df)
+
+                df.columns = clean_column_names(df.columns)
+                df = df.where(pd.notnull(df), None)
+
                  # --- CSV already loaded here ---
                 actual_rows = df.shape[0]
                 actual_columns = df.shape[1]
@@ -666,7 +826,77 @@ def upload_and_insights_new_controller():
             if not file_name or not table_name or not schema:
                 cur.close(); db.close()
                 return build_response(False, "file_name, table_name & schema required", 400)
+            # ==============================
+            # SCENARIO CHECK : TABLE EXISTS ?
+            # ==============================
 
+            # 1️⃣ Check table exists or not
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = %s
+            """, (table_name,))
+
+            table_exists = cur.fetchone()["cnt"] > 0
+
+            # --------------------------------
+            # IF TABLE EXISTS → CHECK SCHEMA
+            # --------------------------------
+            if table_exists:
+
+                # Fetch existing table columns
+                cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
+                existing_cols = cur.fetchall()
+
+                existing_col_names = [
+                    c["Field"].lower()
+                    for c in existing_cols
+                    if c["Field"].lower() != "row_hash"
+                ]
+
+                new_col_names = [
+                    c["column"].lower()
+                    for c in schema
+                ]
+
+                # -----------------------------
+                # SCENARIO-2: SAME COLUMNS
+                # -----------------------------
+                if set(existing_col_names) == set(new_col_names):
+                    cur.close(); db.close()
+                    return build_response(
+                        False,
+                        f"Table `{table_name}` already exists with {len(existing_col_names)} columns.",
+                        409
+                    )
+
+                # -----------------------------
+                # SCENARIO-3: DIFFERENT COLUMNS
+                # -----------------------------
+                else:
+                    cur.close(); db.close()
+                    return build_response(
+                        False,
+                        f"Table `{table_name}` already exists with a different schema.",
+                        409
+                    )
+
+            # --------------------------------
+            # SCENARIO-1: TABLE DOES NOT EXIST
+            # → CONTINUE TO CREATE TABLE
+            # --------------------------------
+
+            file_path = os.path.join(UPLOAD_FOLDER, file_name)
+
+
+            # has_header = body.get("has_header", True)
+
+            # try:
+            #     validate_header_vs_table(has_header, False)
+            # except ValueError as e:
+            #     cur.close(); db.close()
+            #     return build_response(False, str(e), 400)
 
             # ---- CREATE TABLE ----
             db2 = get_db_connection()
@@ -676,6 +906,37 @@ def upload_and_insights_new_controller():
             try:
                 create_table_ddl(cur2, table_name, schema)
                 db2.commit()
+                # --------------------------------------
+                # INSERT METADATA EVEN IF NO DATA INSERT
+                # --------------------------------------
+                try:
+                    cur.callproc("sp_insert_uploaded_file_new_u", [
+                        session_id,
+                        file_name,
+                        table_name,
+                        format_file_size(os.path.getsize(file_path)),              # file_size (no data yet)
+                        "csv",
+                        0,                 # actual_rows
+                        0,                 # actual_columns
+                        0,                 # total_rows
+                        len(schema),       # total_columns
+                        created_by,
+                        "done",            # table_extraction_status
+                        "done",            # column_extraction_status
+                        "[]",              # insights
+                        "pending",         # insights_status
+                        "pending",         # data_insert_status
+                        0                  # new_rows
+                    ])
+
+                    for r in cur.stored_results():
+                        r.fetchone()
+
+                    db.commit()
+
+                except Exception:
+                    db.rollback()
+
             except Exception as e:
                 db2.rollback()
                 cur2.close(); db2.close()
@@ -724,10 +985,52 @@ def upload_and_insights_new_controller():
             # --------------------------
             # LOAD CSV
             # --------------------------
-            df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+            # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+            # df.columns = clean_column_names(df.columns)
+            has_header = body.get("has_header", True)
+
+           
+            # PREVIEW VALIDATION GATE
+            # =========================
+
+            # Scenario 4,6,8 → BLOCK
+            if not has_header and is_existing:
+                cur.close(); db.close()
+                return build_response(
+                    False,
+                    "File without header cannot be mapped to existing table",
+                    400
+                )
+
+            df = load_csv(path, has_header)
+
+            if not has_header:
+                df = apply_default_headers(df)
+
             df.columns = clean_column_names(df.columns)
             df = df.where(pd.notnull(df), None)
             df_clean = df.drop_duplicates().dropna(how="all")
+            # =========================
+            # Scenario-3 validation
+            # No header + New table
+            # =========================
+            if not has_header and not is_existing:
+                # first_row = df_clean.iloc[0].astype(str).tolist()
+                if df_clean.empty:
+                    cur.close(); db.close()
+                    return build_response(False, "CSV contains no valid data rows", 400)
+
+                first_row = df_clean.iloc[0].astype(str).tolist()
+
+                # If header-like text found in first row → error
+                if any(re.search(r"[a-zA-Z]", v) for v in first_row):
+                    cur.close(); db.close()
+                    return build_response(
+                        False,
+                        "Invalid data: first row treated as data but contains header-like values",
+                        400
+                    )
+
 
             # =====================================================
             # CASE 1️⃣ : NEW TABLE PREVIEW
@@ -749,7 +1052,9 @@ def upload_and_insights_new_controller():
 
                 df_clean = normalize_boolean_columns(df_clean)
 
-                preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
+                # preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
+                preview_rows = remove_row_hash(df_clean.head(5).fillna("").to_dict(orient="records"))
+
                 total_rows = df_clean.shape[0]
 
                 cur.close(); db.close()
@@ -770,7 +1075,9 @@ def upload_and_insights_new_controller():
             db_cols = [
                 c["Field"].lower()
                 for c in cols
-                if c["Field"].lower() not in ("id", "row_hash")
+                # if c["Field"].lower() not in ("id", "row_hash")
+                if c["Field"].lower() != "row_hash"
+
             ]
             column_count = len(db_cols)
 
@@ -821,8 +1128,25 @@ def upload_and_insights_new_controller():
                 cur.close(); db.close()
                 return build_response(False, "CSV file missing", 400)
 
-            df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+            # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+            # df.columns = clean_column_names(df.columns)
+            has_header = body.get("has_header", True)
+
+            # # ❗ validate scenario
+            # try:
+            #     validate_header_vs_table(has_header, is_existing)
+            # except ValueError as e:
+            #     cur.close(); db.close()
+            #     return build_response(False, str(e), 400)
+
+            df = load_csv(path, has_header)
+
+            if not has_header:
+                df = apply_default_headers(df)
+
             df.columns = clean_column_names(df.columns)
+            df = df.where(pd.notnull(df), None)
+
             df = df.where(pd.notnull(df), None)
 
             actual_rows = df.shape[0]

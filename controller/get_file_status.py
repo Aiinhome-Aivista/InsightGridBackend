@@ -49,11 +49,11 @@ def get_file_status_controller():
         # NO DATA FOUND
         if not result:
             return build_response(
-                False,
+                True,
                 "No data found",
-                404,
+                200,
                 data=[],
-                status="failed"
+                status="success"
             )
         # if not result:
         #     return build_response(
