@@ -53,6 +53,7 @@ def query_save_controller():
         table_names_json = json.dumps(table_names) if table_names else None
 
         row_data_json = json.dumps(row_data) if row_data else None
+        select_sql = extract_select_query(ai_response)
 
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -76,7 +77,8 @@ def query_save_controller():
             is_execute,
             row_data_json,
             session_id,
-            created_by
+            created_by,
+            select_sql   
         ])
 
         result = list(cursor.stored_results())[0].fetchone()
@@ -90,3 +92,36 @@ def query_save_controller():
     except Exception as e:
         return build_response(False, f"Save Error: {str(e)}", 500)
 
+
+
+def extract_select_query(ai_response: str):
+    if not ai_response:
+        return None
+
+    clean = ai_response
+
+    # Remove DELIMITER
+    clean = clean.replace("DELIMITER ;;", "").replace("DELIMITER ;", "")
+
+    # Remove CREATE PROCEDURE block
+    clean = re.sub(
+        r"CREATE\s+PROCEDURE[\s\S]*?BEGIN",
+        "",
+        clean,
+        flags=re.IGNORECASE
+    )
+
+    # Remove END;
+    clean = re.sub(r"\bEND\b\s*;?", "", clean, flags=re.IGNORECASE)
+
+    # Extract SELECT
+    match = re.search(
+        r"(SELECT[\s\S]*?)(;|$)",
+        clean,
+        flags=re.IGNORECASE
+    )
+
+    if match:
+        return match.group(1).strip()
+
+    return None

@@ -36,6 +36,30 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 
+def normalize_date_columns(df: pd.DataFrame, schema: list):
+    """
+    Convert CSV date values to MySQL DATE format (YYYY-MM-DD)
+    """
+    date_cols = [
+        c["column"]
+        for c in schema
+        if str(c.get("datatype", "")).upper() == "DATE"
+    ]
+
+    for col in date_cols:
+        if col not in df.columns:
+            continue
+
+        df[col] = pd.to_datetime(
+            df[col],
+            errors="coerce",          # invalid → NaT
+            infer_datetime_format=True
+        ).dt.strftime("%Y-%m-%d")
+
+        # NaT → None (important for MySQL)
+        df[col] = df[col].where(pd.notnull(df[col]), None)
+
+    return df
 
 def build_preview_response(file_name, table_name, schema=None, is_existing=False):
     path = os.path.join(UPLOAD_FOLDER, file_name)
@@ -339,94 +363,6 @@ def compare_schemas(file_schema, db_schema):
 
 # -------------------------
 # DDL & Upsert
-# -------------------------
-# def create_table_ddl(cursor, table_name, schema):
-#     """
-#     Create table based on user-provided schema:
-#     - If user provides primary key → NO id column created.
-#     - If primary column is INT/BIGINT → apply AUTO_INCREMENT.
-#     - If user provides no PK → create id INT AUTO_INCREMENT PRIMARY KEY.
-#     """
-#     col_defs = []
-#     pk_cols = []
-#     auto_inc_col = None
-
-#     for col in schema:
-#         name = col.get("column")
-#         if not name:
-#             continue
-
-#         datatype = (col.get("datatype") or col.get("type") or "VARCHAR").upper()
-
-#         # determine base datatype
-#         if datatype in ("INT", "INTEGER"):
-#             dt = "INT"
-#         elif datatype == "BIGINT":
-#             dt = "BIGINT"
-#         elif datatype.startswith("DECIMAL"):
-#             dt = datatype
-#         elif datatype == "DATE":
-#             dt = "DATE"
-#         elif datatype == "DATETIME":
-#             dt = "DATETIME"
-#         elif datatype == "TEXT":
-#             dt = "TEXT"
-#         elif "JSON" in datatype:
-#             dt = "JSON"
-#         elif datatype in ("BOOLEAN", "BOOL"):
-#             dt = "TINYINT(1) DEFAULT 0"
-#         else:
-#             length = col.get("length") or 255
-#             try:
-#                 length = max(1, min(500, int(length)))
-#             except:
-#                 length = 255
-#             dt = f"VARCHAR({length})"
-
-#         # --- PRIMARY KEY LOGIC ---
-#         if col.get("primary"):
-#             pk_cols.append(name)
-
-#             # If PK is numeric → set auto_increment later
-#             if dt in ("INT", "BIGINT"):
-#                 auto_inc_col = name
-
-#         col_defs.append(f"`{name}` {dt}")
-
-#     # --- CASE A: User has given PK ---
-#     if pk_cols:
-#         final_defs = []
-
-#         for cd in col_defs:
-#             col_name = cd.split()[0].strip("`")
-
-#             # Add AUTO_INCREMENT if this is PK & numeric
-#             if col_name == auto_inc_col:
-#                 cd = cd + " AUTO_INCREMENT"
-
-#             final_defs.append(cd)
-
-#         ddl = f"""
-# CREATE TABLE IF NOT EXISTS `{table_name}` (
-#     {", ".join(final_defs)},
-#     row_hash VARCHAR(64),
-#     PRIMARY KEY({",".join(f"`{c}`" for c in pk_cols)})
-# ) ENGINE=InnoDB;
-# """
-
-#     # --- CASE B: No PK provided by user ---
-#     else:
-#         ddl = f"""
-# CREATE TABLE IF NOT EXISTS `{table_name}` (
-#     id INT AUTO_INCREMENT PRIMARY KEY,
-#     {", ".join(col_defs)},
-#     row_hash VARCHAR(64)
-# ) ENGINE=InnoDB;
-# """
-
-#     cursor.execute(ddl)
-
-
 def create_table_ddl(cursor, table_name, schema):
     col_defs = []
     pk_cols = []
@@ -498,21 +434,6 @@ def create_table_ddl(cursor, table_name, schema):
 
     cursor.execute(ddl)
 
-
-# def normalize_boolean_columns(df):
-#     bool_map = {
-#         "true": 1, "false": 0,
-#         "yes": 1, "no": 0,
-#         "1": 1, "0": 0,
-#         True: 1, False: 0
-#     }
-
-#     for col in df.columns:
-#         # Column has boolean-like values?
-#         if df[col].astype(str).str.lower().isin(["true", "false", "yes", "no", "1", "0"]).any():
-#             df[col] = df[col].astype(str).str.lower().map(bool_map).fillna(0)
-
-#     return df
 
 def normalize_boolean_columns(df):
     bool_map = {
@@ -646,10 +567,13 @@ def upload_and_insights_new_controller():
             f.save(path)
             file_size = format_file_size(os.path.getsize(path))
             suggested_table = sanitize_table_name(fname)
-
+           
             # robust CSV load (encoding + delimiter sniff)
             try:
                 df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+                 # --- CSV already loaded here ---
+                actual_rows = df.shape[0]
+                actual_columns = df.shape[1]
             except Exception:
                 # try sniff delimiter
                 with open(path, "r", encoding="utf-8-sig", errors="ignore") as fh:
@@ -695,21 +619,23 @@ def upload_and_insights_new_controller():
             # --------------------------------------
             # PHASE 1: Insert metadata as PENDING
             # --------------------------------------
-            cur.callproc("sp_insert_uploaded_file_new", [
-            session_id,
-            fname,               # ✅ correct
-            suggested_table,     # ✅ correct
-            format_file_size(os.path.getsize(path)),
-            "csv",
-            0,
-            0,
-            created_by,
-            "pending",
-            "pending",
-            "[]",
-            "pending",
-            "pending"
-        ])
+        #     cur.callproc("sp_insert_uploaded_file_new", [
+        #     session_id,
+        #     fname,               # ✅ correct
+        #     suggested_table,     # ✅ correct
+        #     format_file_size(os.path.getsize(path)),
+        #     "csv",
+        #     actual_rows,          
+        #     actual_columns,
+        #     0,
+        #     0,
+        #     created_by,
+        #     "pending",
+        #     "pending",
+        #     "[]",
+        #     "pending",
+        #     "pending"
+        # ])
 
 
             for r in cur.stored_results():
@@ -745,6 +671,8 @@ def upload_and_insights_new_controller():
             # ---- CREATE TABLE ----
             db2 = get_db_connection()
             cur2 = db2.cursor()
+            column_count = len(schema)
+
             try:
                 create_table_ddl(cur2, table_name, schema)
                 db2.commit()
@@ -771,101 +699,9 @@ def upload_and_insights_new_controller():
             cur.close(); db.close()
             return build_response(True, "Table created & preview ready", 200, {
                 **preview_data,
-                "summary_message": f"Table `{table_name}` created successfully."
+                # "summary_message": f"Table `{table_name}` created successfully."
+                "summary_message": f"Table `{table_name}` created successfully with {column_count} columns."
             })
-
-          # ACTION: preview
-        # --------------------------
-        # if action == "preview":
-        #     file_name = body.get("file_name")
-        #     table_name = body.get("table_name")
-        #     is_existing = bool(body.get("is_existing", False))
-        #     schema = body.get("schema")  # only for new table preview
-
-        #     if not file_name or not table_name:
-        #         cur.close(); db.close()
-        #         return build_response(False, "file_name and table_name required", 400)
-
-        #     path = os.path.join(UPLOAD_FOLDER, file_name)
-        #     if not os.path.exists(path):
-        #         cur.close(); db.close()
-        #         return build_response(False, "CSV file missing", 400)
-        #     df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
-        #     df.columns = clean_column_names(df.columns)
-        #     df = df.where(pd.notnull(df), None)
-
-        #     # ------------------------------------
-        #     # CASE 1: NEW TABLE PREVIEW (is_existing = false)
-        #     # ------------------------------------
-        #     if not is_existing:
-        #         if not schema:
-        #             cur.close(); db.close()
-        #             return build_response(False, "Schema required for new table preview", 400)
-
-        #         expected_cols = [col["column"] for col in schema]
-
-        #         # Add missing schema columns
-        #         for col in expected_cols:
-        #             if col not in df.columns:
-        #                 df[col] = None
-
-        #         # Remove extra CSV columns
-        #         df = df[expected_cols]
-
-        #         # Convert boolean-like columns to 1/0
-        #         df = normalize_boolean_columns(df)
-
-        #         df_clean = df.drop_duplicates().dropna(how="all")
-
-        #         preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
-        #         total_rows = df_clean.shape[0]
-
-        #         cur.close(); db.close()
-
-        #         return build_response(True, "Preview", 200, {
-        #             "table_name": table_name,
-        #             "total_rows": total_rows,
-        #             "preview_rows": preview_rows
-        #         })
-
-        #     # ------------------------------------
-        #     # CASE 2: EXISTING TABLE PREVIEW
-        #     # ------------------------------------
-        #     df_clean = df.drop_duplicates().dropna(how="all")
-
-        #     csv_cols = [c.lower() for c in df_clean.columns]
-
-        #     cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
-        #     cols = cur.fetchall()
-
-        #     db_cols = [
-        #         c["Field"].lower()
-        #         for c in cols
-        #         if c["Field"].lower() not in ("id", "row_hash")
-        #     ]
-
-        #     missing_in_csv = [c for c in db_cols if c not in csv_cols]
-        #     extra_in_csv = [c for c in csv_cols if c not in db_cols]
-
-        #     if missing_in_csv or extra_in_csv:
-        #         cur.close(); db.close()
-        #         return build_response(False, "Schema mismatch", 400, {
-        #             "missing_in_csv": missing_in_csv,
-        #             "extra_in_csv": extra_in_csv
-        #         })
-
-        #     df_clean = normalize_boolean_columns(df_clean)
-
-        #     preview_rows = df_clean.head(5).fillna("").to_dict(orient="records")
-        #     total_rows = df_clean.shape[0]
-
-        #     cur.close(); db.close()
-        #     return build_response(True, "Preview", 200, {
-        #         "table_name": table_name,
-        #         "total_rows": total_rows,
-        #         "preview_rows": preview_rows
-        #     })
-
 
         # --------------------------
         # ACTION: preview
@@ -936,6 +772,7 @@ def upload_and_insights_new_controller():
                 for c in cols
                 if c["Field"].lower() not in ("id", "row_hash")
             ]
+            column_count = len(db_cols)
 
             missing_in_csv = [c for c in db_cols if c not in csv_cols]
             extra_in_csv = [c for c in csv_cols if c not in db_cols]
@@ -959,7 +796,9 @@ def upload_and_insights_new_controller():
                 "table_name": table_name,
                 "total_rows": total_rows,
                 "preview_rows": preview_rows,
-                "summary_message": "Table already exists."
+                # "summary_message": "Table already exists."
+                "summary_message": f"Table `{table_name}` already exists with {column_count} columns."
+
             })
 
         # --------------------------
@@ -986,39 +825,28 @@ def upload_and_insights_new_controller():
             df.columns = clean_column_names(df.columns)
             df = df.where(pd.notnull(df), None)
 
+            actual_rows = df.shape[0]
+            actual_columns = df.shape[1]
+            
             # --- Clean & Normalize ---
             df_clean = df.drop_duplicates().dropna(how="all")
             df_clean = normalize_boolean_columns(df_clean)
 
+            # ✅ FIX: normalize DATE columns using schema
+            if schema:
+                df_clean = normalize_date_columns(df_clean, schema)
             # Add row_hash
             df_clean["row_hash"] = df_clean.apply(lambda r: _make_row_hash(r.values), axis=1)
 
             total_rows = df_clean.shape[0]
-            total_cols = df_clean.shape[1]
+            # total_cols = df_clean.shape[1]
+            total_cols = len([
+                c for c in df_clean.columns
+                if c.lower() != "row_hash"
+            ])
 
             # --------------------------------------
             # NEW TABLE → CREATE TABLE USING UI SCHEMA
-            # --------------------------------------
-            # if not is_existing:
-            #     if not schema:
-            #         cur.close(); db.close()
-            #         return build_response(False, "Schema required for new table", 400)
-
-            #     db2 = get_db_connection()
-            #     cur2 = db2.cursor()
-
-            #     try:
-            #         create_table_ddl(cur2, table_name, schema)
-            #         db2.commit()
-            #     except Exception as e:
-            #         db2.rollback()
-            #         cur2.close(); db2.close()
-            #         cur.close(); db.close()
-            #         return build_response(False, f"Create table failed: {str(e)}", 500)
-
-            #     cur2.close(); db2.close()
-
-
             # --------------------------------------
             # INSERT / UPSERT → both new and existing
             # --------------------------------------
@@ -1026,8 +854,23 @@ def upload_and_insights_new_controller():
             cur3 = db3.cursor(dictionary=True)
 
             try:
+                # 🔹 BEFORE INSERT: get existing row count
+                cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                before_rows = cur3.fetchone()["cnt"]
+
                 upsert_df_to_table(cur3, table_name, df_clean)
                 db3.commit()
+                #  AFTER upsert_df_to_table + commit
+                # cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                # db_total_rows = cur3.fetchone()["cnt"]
+
+                # total_rows = db_total_rows   # ✅ OVERRIDE CSV COUNT
+                # 🔹 AFTER INSERT: get updated row count
+                cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                after_rows = cur3.fetchone()["cnt"]
+                new_rows = max(0, after_rows - before_rows)
+
+                total_rows = after_rows
                 insert_status = "done"
             except Exception as e:
                 db3.rollback()
@@ -1051,12 +894,14 @@ def upload_and_insights_new_controller():
             # CALL STORED PROCEDURE (metadata)
             # --------------------------------------
             try:
-                cur3.callproc("sp_insert_uploaded_file_new", [
+                cur3.callproc("sp_insert_uploaded_file_new_u", [
                     session_id,
                     file_name,
                     table_name,
                     format_file_size(os.path.getsize(path)),
                     "csv",
+                    actual_rows,          # ✅ NEW
+                    actual_columns, 
                     total_rows,
                     total_cols,
                     created_by,
@@ -1064,7 +909,8 @@ def upload_and_insights_new_controller():
                     "done",
                     insights_json,
                     insight_status,
-                    insert_status  
+                    insert_status,
+                    new_rows  
                 ])
 
                 sp_result = None
@@ -1091,11 +937,24 @@ def upload_and_insights_new_controller():
 
             cur3.close(); db3.close()
             cur.close(); db.close()
-            summary_message = (
-                f"Table `{table_name}` successfully inserted with {total_cols} columns and {total_rows} new rows."
-                if is_existing
-                else f"Table `{table_name}` successfully created with {total_cols} columns and {total_rows} rows."
-            )
+            if not is_existing:
+                summary_message = (
+                    f"Table `{table_name}` successfully created with "
+                    f"{total_cols} columns and {total_rows} rows."
+                )
+            else:
+                if new_rows > 0:
+                    summary_message = (
+                        f"Table `{table_name}` successfully updated with {total_cols} columns. "
+                        f"{new_rows} new rows added, total rows now {total_rows}."
+                    )
+                else:
+                    summary_message = (
+                        f"Table `{table_name}` already exists with {total_cols} columns. "
+                        f"No new data was available to insert; total rows remain {total_rows}."
+                    )
+
+
             return build_response(True, "Data inserted", 200, {
                 "file_id": file_id,
                 "file_status": status_flag,
