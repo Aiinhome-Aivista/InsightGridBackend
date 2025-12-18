@@ -234,7 +234,7 @@ def query_save_controller():
         cursor.close()
         conn.close()
 
-        return build_response(True, "Messages saved successfully", 200, response_rows)
+        return build_response(True, "Messages saved successfully", 200)
 
     except Exception as e:
         return build_response(False, f"Save Error: {e}", 500)
