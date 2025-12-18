@@ -1202,6 +1202,17 @@ def upload_and_insights_new_controller():
                 cur3.close(); db3.close()
                 cur.close(); db.close()
                 return build_response(False, f"Insert failed: {str(e)}", 500)
+                
+                
+            # --------------------------------------
+            # 🔥 REFRESH QUERY ROW COUNTS (HERE)
+            # --------------------------------------
+            try:
+                cur3.callproc("sp_refresh_query_row_counts_v2")
+                db3.commit()
+            except Exception as e:
+                # ❗ data insert already successful, so don't fail main flow
+                print("Row count refresh failed:", str(e))
 
             # --------------------------------------
             # Generate LLM insights

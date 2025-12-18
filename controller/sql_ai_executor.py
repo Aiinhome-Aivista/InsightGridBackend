@@ -163,7 +163,14 @@ def chat_endpoint_controller():
             cursor.execute(f"SELECT * FROM `{tname}`")
             rows = cursor.fetchall()
 
-            schema_context[tname] = list(rows[0].keys()) if rows else []
+            # schema_context[tname] = list(rows[0].keys()) if rows else []
+            if rows:
+                schema_context[tname] = [
+                    col for col in rows[0].keys()
+                    if col.lower() != "row_hash"
+                ]
+            else:
+                schema_context[tname] = []
 
         cursor.close()
         conn.close()
@@ -354,11 +361,19 @@ def run_select_query(select_query):
 
         cursor.execute(select_query)
         rows = cursor.fetchall()
+        
+          # 🔥 REMOVE row_hash FROM ROW DATA
+        for r in rows:
+            r.pop("row_hash", None)
 
         end_time = time.time()     # ⏱️ END
         elapsed = end_time - start_time
-
-        column_names = [desc[0] for desc in cursor.description]
+        # 🔥 REMOVE row_hash FROM COLUMNS
+        column_names = [
+            desc[0] for desc in cursor.description
+            if desc[0].lower() != "row_hash"
+        ]
+        # column_names = [desc[0] for desc in cursor.description]
 
         cursor.close()
         conn.close()
