@@ -28,14 +28,17 @@ def save_report_controller():
             return build_response(False, "Invalid session or user", 401)
 
         # Fetch row_affected
+        # cur.execute("""
+        #     SELECT rows_effected FROM query_history WHERE id=%s
+        # """, (query_history_id,))
         cur.execute("""
-            SELECT rows_effected FROM query_history WHERE id=%s
+            SELECT row_count FROM query_history_v2 WHERE id=%s
         """, (query_history_id,))
         row = cur.fetchone()
         if not row:
             return build_response(False, "Invalid query_history_id", 404)
 
-        rows_effected = row["rows_effected"]
+        rows_effected = row["row_count"]
 
 
         # Call SP (save or update)
@@ -69,6 +72,60 @@ def save_report_controller():
     except Exception as e:
         return build_response(False, "Server Error", 500, {"error": str(e)})
 
+# def report_list_controller():
+#     try:
+#         data = request.get_json() or {}
+#         session_id = data.get("session_id")
+#         user_id = data.get("created_by")
+
+#         if not session_id or not user_id:
+#             return build_response(False, "session_id & user_id required", 400)
+
+#         conn = get_db_connection()
+#         cur = conn.cursor(dictionary=True)
+
+#         cur.execute("""
+#             SELECT 1 FROM users
+#             WHERE session_id=%s AND user_id=%s
+#         """, (session_id, user_id))
+#         if not cur.fetchone():
+#             return build_response(False, "Invalid session or user", 401)
+        
+#         cur.callproc("sp_get_report_list", [session_id, user_id])
+
+#         rows = []
+#         for res in cur.stored_results():
+#             rows = res.fetchall()
+
+#         result = []
+#         for r in rows:
+#             result.append({
+#                 "report_id": r["report_id"],
+#                 "report_name": r["report_name"],
+#                 "row_affected": r["row_affected"],
+#                 "group_by": [],
+#                 "created_at": r["created_at"],
+#                 "actual_created_at": r["actual_created_at"],
+#                 "actual_created_date": r["actual_created_date"],
+#                 "query": {
+#                     "query_id": r["query_id"],
+#                     "query_name": r["query_title"],
+#                     "ai_responce": r["ai_response"]
+#                 }
+#             })
+
+#         cur.close()
+#         conn.close()
+
+#         return build_response(True, "Report list fetched successfully", 200, {
+#             "Report list": result
+#         })
+
+#     except Exception as e:
+#         return build_response(False, "Server Error", 500, {"error": str(e)})
+
+
+# v2
 def report_list_controller():
     try:
         data = request.get_json() or {}
@@ -81,14 +138,16 @@ def report_list_controller():
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
 
+        # Validate session + user
         cur.execute("""
             SELECT 1 FROM users
             WHERE session_id=%s AND user_id=%s
         """, (session_id, user_id))
         if not cur.fetchone():
             return build_response(False, "Invalid session or user", 401)
-        
-        cur.callproc("sp_get_report_list", [session_id, user_id])
+
+        #  V2 SP call
+        cur.callproc("sp_get_report_list_v2", [session_id, user_id])
 
         rows = []
         for res in cur.stored_results():
@@ -97,6 +156,7 @@ def report_list_controller():
         result = []
         for r in rows:
             result.append({
+                # ===== SAME AS OLD =====
                 "report_id": r["report_id"],
                 "report_name": r["report_name"],
                 "row_affected": r["row_affected"],
@@ -104,8 +164,13 @@ def report_list_controller():
                 "created_at": r["created_at"],
                 "actual_created_at": r["actual_created_at"],
                 "actual_created_date": r["actual_created_date"],
+
+                # ADDITION (non-breaking)
+                "query_history_id": r["query_history_id"],
+
+                # ===== SAME AS OLD =====
                 "query": {
-                    "query_id": r["query_id"],
+                    "query_id": r["query_history_id"],   # 🔥 map here
                     "query_name": r["query_title"],
                     "ai_responce": r["ai_response"]
                 }
@@ -114,6 +179,7 @@ def report_list_controller():
         cur.close()
         conn.close()
 
+        #  SAME response wrapper as OLD
         return build_response(True, "Report list fetched successfully", 200, {
             "Report list": result
         })
