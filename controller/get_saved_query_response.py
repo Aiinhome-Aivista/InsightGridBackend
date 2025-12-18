@@ -180,6 +180,63 @@ Return ONLY this JSON:
 # ---------------------------------------------------------
 # FINAL CONTROLLER — v4 compatible
 # ---------------------------------------------------------
+# def get_saved_query_response_controller():
+#     try:
+#         body = request.get_json()
+#         created_by = body.get("created_by")
+#         session_id = body.get("session_id")
+
+#         if not created_by or not session_id:
+#             return build_response(False, "created_by & session_id required", 400)
+
+#         db = get_db_connection()
+#         cursor = db.cursor(dictionary=True)
+
+#         cursor.callproc(
+#             "sp_get_query_details_by_user_session_id_v2",
+#             (created_by, session_id)
+#         )
+
+#         rows = []
+#         for rs in cursor.stored_results():
+#             rows = rs.fetchall()
+
+#         cursor.close()
+#         db.close()
+
+#         if not rows:
+#             return build_response(True, "No data found", 200, {})
+
+#         # ---- OUTER FIELDS (once) ----
+#         response = {
+#             "query_title": rows[0]["query_title"],
+#             "session_id": rows[0]["session_id"],
+#             "created_by": rows[0]["created_by"],
+#             "created_at": rows[0]["created_at"],
+#             "created_date": rows[0]["created_date"],
+#             "messages": []
+#         }
+
+#         # ---- INNER MESSAGES ARRAY ----
+#         for r in rows:
+#             response["messages"].append({
+#                 "id": r["id"],
+#                 "query": r["query"],
+#                 "ai_response": r["ai_response"],
+#                 "is_execute": r["is_execute"],
+#                 "row_count": r["rows_effected"],
+#                 "query_time": r["query_time"],
+#                 "actual_created_at": r["actual_created_at"],
+#                 "updated_by": r["updated_by"],
+#                 "updated_at": r["updated_at"]
+#             })
+
+#         return build_response(True, "Chat history loaded", 200, {"queries": [response]})
+
+#     except Exception as e:
+#         return build_response(False, f"Server Error: {str(e)}", 500)
+
+# FINAL CONTROLLER — v2 compatible
 def get_saved_query_response_controller():
     try:
         body = request.get_json()
@@ -205,22 +262,59 @@ def get_saved_query_response_controller():
         db.close()
 
         if not rows:
-            return build_response(True, "No data found", 200, {})
+            return build_response(True, "No data found", 200, {"queries": []})
 
-        # ---- OUTER FIELDS (once) ----
-        response = {
-            "query_title": rows[0]["query_title"],
-            "session_id": rows[0]["session_id"],
-            "created_by": rows[0]["created_by"],
-            "created_at": rows[0]["created_at"],
-            "created_date": rows[0]["created_date"],
-            "messages": []
-        }
+        # =========================
+        # GROUP BY PARENT QUERY
+        # =========================
+        query_map = {}
 
-        # ---- INNER MESSAGES ARRAY ----
+        # for r in rows:
+        #     parent_id = r["parent_query_id"] or r["id"]
+
+        #     if parent_id not in query_map:
+        #         query_map[parent_id] = {
+        #             "id": parent_id,
+        #             "query_title": r["query_title"],
+        #             "session_id": r["session_id"],
+        #             "created_by": r["created_by"],
+        #             "created_at": r["created_at"],
+        #             "created_date": r["created_date"],
+        #             "messages": []
+        #         }
+
+        #     query_map[parent_id]["messages"].append({
+        #         "id": r["id"],
+        #         "mode": r["mode"],
+        #         "query": r["query"],
+        #         "ai_response": r["ai_response"],
+        #         "is_execute": r["is_execute"],
+        #         "row_count": r["rows_effected"],
+        #         "query_time": r["query_time"],
+        #         "actual_created_at": r["actual_created_at"],
+        #         "updated_by": r["updated_by"],
+        #         "updated_at": r["updated_at"]
+        #     })
         for r in rows:
-            response["messages"].append({
+            if r["mode"] == "NEW":
+                parent_id = r["id"]
+            else:
+                parent_id = r["parent_query_id"]
+
+            if parent_id not in query_map:
+                query_map[parent_id] = {
+                    "id": parent_id,
+                    "query_title": r["query_title"],
+                    "session_id": r["session_id"],
+                    "created_by": r["created_by"],
+                    "created_at": r["created_at"],
+                    "created_date": r["created_date"],
+                    "messages": []
+                }
+
+            query_map[parent_id]["messages"].append({
                 "id": r["id"],
+                "mode": r["mode"],
                 "query": r["query"],
                 "ai_response": r["ai_response"],
                 "is_execute": r["is_execute"],
@@ -231,7 +325,12 @@ def get_saved_query_response_controller():
                 "updated_at": r["updated_at"]
             })
 
-        return build_response(True, "Chat history loaded", 200, {"queries": [response]})
+        return build_response(
+            True,
+            "Chat history loaded",
+            200,
+            {"queries": list(query_map.values())}
+        )
 
     except Exception as e:
         return build_response(False, f"Server Error: {str(e)}", 500)

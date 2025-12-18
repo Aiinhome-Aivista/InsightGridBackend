@@ -77,11 +77,25 @@ def validate_tables_and_columns_pre_llm(user_query, schema_context):
     return True, None
 
 
-def is_safe_select(sql):
-    forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE"]
-    u = sql.upper()
-    return u.startswith("SELECT") and not any(k in u for k in forbidden)
+# def is_safe_select(sql):
+#     forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE"]
+#     u = sql.upper()
+#     return u.startswith("SELECT") and not any(k in u for k in forbidden)
 
+def is_safe_select(sql):
+    sql = sql.strip()
+
+    # must start with SELECT
+    if not re.match(r"^SELECT\b", sql, re.IGNORECASE):
+        return False
+
+    # block only whole forbidden keywords
+    forbidden_pattern = r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE)\b"
+
+    if re.search(forbidden_pattern, sql, re.IGNORECASE):
+        return False
+
+    return True
 
 def ask_llm_for_sp_name(user_query):
     prompt = f"""

@@ -128,10 +128,10 @@
 
 
 
-from flask import request
-import json, re
-from database.dbConnection import get_db_connection
-from helper.helperFunctions import build_response
+# from flask import request
+# import json, re
+# from database.dbConnection import get_db_connection
+# from helper.helperFunctions import build_response
 
 
 def extract_select_sql(ai_response):
@@ -156,6 +156,90 @@ def extract_tables(sql):
     return list(tables)
 
 
+# def query_save_controller():
+#     try:
+#         data = request.get_json()
+
+#         session_id = data.get("session_id")
+#         created_by = data.get("created_by")
+#         query_title = data.get("query_title")
+#         messages = data.get("messages", [])
+
+#         if not all([session_id, created_by, query_title, messages]):
+#             return build_response(False, "Missing required fields", 400)
+
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+
+#         prev_db_id = None
+#         prev_query_text = None
+#         response_rows = []
+
+#         for idx, msg in enumerate(messages):
+
+#             user_query = msg.get("query")
+#             ai_response = msg.get("ai_response")
+
+#             executable_sql = extract_select_sql(ai_response)
+#             table_names = extract_tables(executable_sql)
+
+#             # ---- decide mode ----
+#             if idx == 0:
+#                 mode = "NEW"
+#                 parent_id = None
+#             else:
+#                 if user_query == prev_query_text:
+#                     mode = "EDIT"
+#                     parent_id = prev_db_id
+#                 else:
+#                     mode = "CONTEXT"
+#                     parent_id = prev_db_id
+
+#             cursor.callproc("sp_save_query_v2", [
+#                 session_id,
+#                 created_by,
+#                 query_title,
+
+#                 msg.get("query_id"),
+#                 user_query,
+#                 ai_response,
+#                 executable_sql,
+#                 json.dumps(table_names),
+
+#                 msg.get("is_execute", 0),
+#                 msg.get("is_success", 0),
+#                 msg.get("row_count", 0),
+#                 msg.get("query_time"),
+
+#                 mode,
+#                 parent_id
+#             ])
+
+#             result = list(cursor.stored_results())[0].fetchone()
+#             prev_db_id = result[0]
+#             prev_query_text = user_query
+
+#             response_rows.append({
+#                 "db_id": prev_db_id,
+#                 "mode": mode
+#             })
+
+#         conn.commit()
+#         cursor.close()
+#         conn.close()
+
+#         return build_response(True, "Messages saved successfully", 200, response_rows)
+
+#     except Exception as e:
+#         return build_response(False, f"Save Error: {e}", 500)
+
+
+
+from flask import request
+import json, re
+from database.dbConnection import get_db_connection
+from helper.helperFunctions import build_response
+
 def query_save_controller():
     try:
         data = request.get_json()
@@ -163,6 +247,7 @@ def query_save_controller():
         session_id = data.get("session_id")
         created_by = data.get("created_by")
         query_title = data.get("query_title")
+        parent_query_id = data.get("parent_query_id")
         messages = data.get("messages", [])
 
         if not all([session_id, created_by, query_title, messages]):
@@ -171,8 +256,7 @@ def query_save_controller():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        prev_db_id = None
-        prev_query_text = None
+        root_parent_id = parent_query_id
         response_rows = []
 
         for idx, msg in enumerate(messages):
@@ -183,44 +267,42 @@ def query_save_controller():
             executable_sql = extract_select_sql(ai_response)
             table_names = extract_tables(executable_sql)
 
-            # ---- decide mode ----
             if idx == 0:
-                mode = "NEW"
-                parent_id = None
-            else:
-                if user_query == prev_query_text:
+                if parent_query_id:
                     mode = "EDIT"
-                    parent_id = prev_db_id
+                    parent_id = parent_query_id
                 else:
-                    mode = "CONTEXT"
-                    parent_id = prev_db_id
+                    mode = "NEW"
+                    parent_id = None
+            else:
+                mode = "CONTEXT"
+                parent_id = root_parent_id
 
             cursor.callproc("sp_save_query_v2", [
                 session_id,
                 created_by,
                 query_title,
-
                 msg.get("query_id"),
                 user_query,
                 ai_response,
                 executable_sql,
                 json.dumps(table_names),
-
                 msg.get("is_execute", 0),
                 msg.get("is_success", 0),
                 msg.get("row_count", 0),
                 msg.get("query_time"),
-
                 mode,
                 parent_id
             ])
 
             result = list(cursor.stored_results())[0].fetchone()
-            prev_db_id = result[0]
-            prev_query_text = user_query
+            saved_id = result[0]
+
+            if mode == "NEW":
+                root_parent_id = saved_id
 
             response_rows.append({
-                "db_id": prev_db_id,
+                "db_id": saved_id,
                 "mode": mode
             })
 
