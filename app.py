@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request,g
+from flask import Flask, request,g, send_from_directory
 from flask_cors import CORS
 from controller.company_user_register import company_user_register_controller
 from controller.get_file_status import get_file_status_controller
@@ -18,10 +18,13 @@ from controller.superadmin_login import superadmin_login_controller
 from controller.company_login import company_login_controller
 
 
-app = Flask(__name__,
-    static_url_path="/uploads",
-    static_folder=os.getenv("UPLOAD_FOLDER"))
+# app = Flask(__name__,
+#     static_url_path="/uploads",
+#     static_folder=os.getenv("UPLOAD_FOLDER"))
 
+app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_ROOT = os.path.join(BASE_DIR, "uploads")
 CORS(app)
 
 
@@ -101,7 +104,9 @@ def admin_company_register_route():
 def admin_company_admin_register_route():
     return admin_company_admin_register_controller()
 
-
+@app.route("/uploads/<path:filename>")
+def serve_uploads(filename):
+    return send_from_directory(UPLOAD_ROOT, filename)
 # Run the Flask Server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3008, debug=True)

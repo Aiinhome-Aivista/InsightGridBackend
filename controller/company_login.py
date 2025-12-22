@@ -92,6 +92,16 @@ def company_login_controller():
     #     "company_code": company_code,
     #     "session_id": session_id
     # })
+    # ---- build full logo url for PDF ----
+    base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
+    logo_path = company["company_logo"]        # /uploads/companies/...
+
+    company_logo_url = (
+            f"{base_url}{logo_path}"
+            if logo_path else None
+        )
+
+
     return build_response(
         True,
         "Login successful",
@@ -110,6 +120,7 @@ def company_login_controller():
             "company_email": company["company_email"],
             "company_address": company["address"],
             "company_logo": company["company_logo"],
+             "company_logo_url": company_logo_url,
             "company_phone": company["phone_number"],
             "subscription_type": company["subscription_type"],
             "subscription_from": str(company["from_date"]),
