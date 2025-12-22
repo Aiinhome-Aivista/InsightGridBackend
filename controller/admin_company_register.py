@@ -369,11 +369,11 @@ def create_stored_procedures(db_name):
       AND q.session_id = p_session_id
       AND q.mode IN ('NEW','EDIT','CONTEXT')
     ORDER BY 
-      COALESCE(q.parent_query_id, q.id),
-      q.version_no DESC,
       q.created_at DESC;     
     END
     """)
+    #  COALESCE(q.parent_query_id, q.id),
+    #   q.version_no DESC,
     # ============================================================
     # sp_get_report_list
     # ============================================================
@@ -935,15 +935,15 @@ CREATE TABLE IF NOT EXISTS user_roles (
         c.execute("""
         INSERT IGNORE INTO user_roles (id, role_name)
         VALUES
-        (1, 'CompanyAdmin'),
-        (2, 'User')
+        (1, 'companyadmin'),
+        (2, 'user')
 """)
 
     # Insert default Admin role
-        c.execute("""
-    INSERT IGNORE INTO user_roles (id, role_name)
-    VALUES (1, 'Admin')
-    """)
+    #     c.execute("""
+    # INSERT IGNORE INTO user_roles (id, role_name)
+    # VALUES (1, 'Admin')
+    # """)
 
     # ---------------- USERS ----------------
         # ---------------- USERS (COMPANY DB) ----------------

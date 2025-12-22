@@ -8,7 +8,7 @@ from helper.helperFunctions import build_response
 def company_login_controller():
     data = request.get_json() or {}
 
-    company_code = data.get("company_code", "ABCRTL25001")
+    company_code = data.get("company_code")
     email = data.get("user_email")
     password = data.get("password")
 
