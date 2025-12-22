@@ -565,22 +565,113 @@ ON DUPLICATE KEY UPDATE {update_sql};
 # -------------------------
 # Insights (LLM) - optional
 # -------------------------
+# def generate_insights_from_llm(df: pd.DataFrame, file_name: str):
+#     try:
+#         sample = df.head(500).fillna("").to_dict(orient="records")
+#         prompt = f"""
+# You are a senior data analyst.
+# Return ONLY a JSON array of short insights (strings) for file '{file_name}'.
+
+# Sample rows:
+# {json.dumps(sample, indent=2)}
+# """
+#         raw = call_llm(prompt).strip()
+#         raw = raw.replace("```json", "").replace("```", "").strip()
+#         parsed = safe_parse_json(raw)
+#         if isinstance(parsed, list):
+#             return [str(x) for x in parsed]
+#         return [f"[Insight Error] Unexpected LLM response type: {type(parsed)}"]
+#     except Exception as ex:
+#         return [f"[Insight Error] {str(ex)}"]
+
+def build_dataset_summary(df: pd.DataFrame):
+    summary = {
+        "row_count": int(len(df)),
+        "column_count": int(len(df.columns)),
+        "columns": {}
+    }
+
+    for col in df.columns:
+        ser = df[col]
+
+        col_summary = {
+            "dtype": str(ser.dtype),
+            "null_pct": round(ser.isna().mean() * 100, 2),
+            "unique_count": int(ser.nunique())
+        }
+
+        if pd.api.types.is_numeric_dtype(ser):
+            col_summary.update({
+                "min": float(ser.min()),
+                "max": float(ser.max()),
+                "mean": round(float(ser.mean()), 2),
+                "median": round(float(ser.median()), 2),
+                "p95": round(float(ser.quantile(0.95)), 2)
+            })
+
+        elif pd.api.types.is_object_dtype(ser):
+            col_summary["top_5_values"] = (
+                ser.value_counts().head(5).to_dict()
+            )
+
+        summary["columns"][col] = col_summary
+
+    return summary
+
+
+def validate_insights(insights: list):
+    """
+    Accept only insights that contain numeric evidence
+    """
+    valid = []
+    for ins in insights:
+        if isinstance(ins, str) and any(ch.isdigit() for ch in ins):
+            valid.append(ins)
+    return valid
+
+
 def generate_insights_from_llm(df: pd.DataFrame, file_name: str):
     try:
-        sample = df.head(500).fillna("").to_dict(orient="records")
-        prompt = f"""
-You are a senior data analyst.
-Return ONLY a JSON array of short insights (strings) for file '{file_name}'.
+        summary = build_dataset_summary(df)
 
-Sample rows:
+        # sample only for context, NOT truth
+        sample = df.sample(min(50, len(df))).fillna("").to_dict(orient="records")
+
+        prompt = f"""
+You are a senior business data analyst.
+
+Dataset: {file_name}
+
+The statistics below are computed from the FULL dataset.
+You MUST NOT guess, assume, or infer anything not present.
+
+DATASET FACTS:
+{json.dumps(summary, indent=2)}
+
+Optional sample rows (for context only):
 {json.dumps(sample, indent=2)}
+
+STRICT RULES:
+1. Every insight MUST reference at least one numeric value from DATASET FACTS
+2. DO NOT use words like: appears, seems, relatively, may indicate
+3. DO NOT repeat obvious facts (row count, column count)
+4. Focus on anomalies, skewed distributions, risks, or business implications
+5. If something cannot be concluded → OMIT it
+
+Return ONLY a JSON array of short insights.
 """
-        raw = call_llm(prompt).strip()
+
+        raw = call_llm(prompt)
         raw = raw.replace("```json", "").replace("```", "").strip()
+
         parsed = safe_parse_json(raw)
+
         if isinstance(parsed, list):
-            return [str(x) for x in parsed]
-        return [f"[Insight Error] Unexpected LLM response type: {type(parsed)}"]
+            cleaned = validate_insights([str(x) for x in parsed])
+            return cleaned if cleaned else ["No statistically valid insights generated"]
+
+        return ["[Insight Error] Invalid LLM response format"]
+
     except Exception as ex:
         return [f"[Insight Error] {str(ex)}"]
 
