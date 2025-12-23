@@ -47,6 +47,25 @@ def save_report_controller():
 
         rows_effected = row["row_count"]
 
+        # -------------------------------------------------
+        # PREVENT DUPLICATE REPORT NAME (same user + session)
+        # -------------------------------------------------
+        cur.execute("""
+            SELECT 1
+            FROM saved_reports
+            WHERE report_name = %s
+            AND session_id = %s
+            AND user_id = %s
+            LIMIT 1
+        """, (report_name, session_id, user_id))
+
+        if cur.fetchone():
+            return build_response(
+                False,
+                "Report name already exists. Please use a different name.",
+                400
+            )
+
 
         # Call SP (save or update)
         args = [

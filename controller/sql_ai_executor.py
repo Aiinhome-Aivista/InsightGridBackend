@@ -3,6 +3,7 @@ import re
 from flask import request,g
 from helper.helperFunctions import build_response
 from model.llm_client import call_llm
+from helper.visualization_engine import build_insights
 import time
 COLUMN_SYNONYMS = {
     "blood group": "blood_group",
@@ -11,6 +12,18 @@ COLUMN_SYNONYMS = {
     "dept": "department_id",
     "department": "department_id"
 }
+
+def is_aggregation_query(select_query: str):
+    select_query = select_query.lower()
+
+    return (
+        "count(" in select_query or
+        "sum(" in select_query or
+        "avg(" in select_query or
+        "min(" in select_query or
+        "max(" in select_query
+    )
+
 
 def extract_tables_and_columns_from_query(user_query, schema_context):
     words = re.findall(r"\b[a-zA-Z_]+\b", user_query.lower())
@@ -303,6 +316,7 @@ def run_select_query(select_query):
         cursor = conn.cursor(dictionary=True)
 
         start_time = time.time()   # ⏱️ START
+        g.last_used_table = extract_main_table_from_query(select_query)
 
         cursor.execute(select_query)
         rows = cursor.fetchall()
@@ -321,7 +335,7 @@ def run_select_query(select_query):
         # column_names = [desc[0] for desc in cursor.description]
 
         cursor.close()
-        conn.close()
+        # conn.close()
 
         return True, {
             "columns": column_names,
@@ -333,6 +347,10 @@ def run_select_query(select_query):
     except Exception as e:
         return False, None, str(e)
 
+def extract_main_table_from_query(sql):
+    import re
+    match = re.search(r"\bFROM\s+`?(\w+)`?", sql, re.IGNORECASE)
+    return match.group(1) if match else None
 
 
 def execute_sql_endpoint_controller():
@@ -350,13 +368,43 @@ def execute_sql_endpoint_controller():
         if not is_safe_select(select_query):
             return build_response(False, "Only SELECT queries are allowed", 400)
         # ✅ 4. execute
+        # success, results, msg = run_select_query(select_query)
+
+        # if success:
+        #     total = results.get("total_rows", 0)
+        #      # 🔥 ADD-ON INSIGHTS (NO EXISTING CHANGE)
+        #     table_name = g.get("last_used_table")  # set earlier when query executed
+        #     visualization = build_insights(
+        #         table_name,
+        #         results.get("columns", [])
+        #     )
+
+        #     results["visualization"] = visualization  #  ONLY NEW KEY
+
+        #     msg = "Query executed successfully, but no data found." if total == 0 \
+        #           else f"Successfully fetched {total} rows."
+        #     return build_response(True, msg, 200, results)
         success, results, msg = run_select_query(select_query)
 
         if success:
+
+
+            # 🔥 2️⃣ NORMAL TABLE QUERY (UNCHANGED)
             total = results.get("total_rows", 0)
+
+            table_name = g.get("last_used_table")
+            visualization = build_insights(
+                table_name,
+                results.get("columns", [])
+            )
+
+            results["visualization"] = visualization
+
             msg = "Query executed successfully, but no data found." if total == 0 \
-                  else f"Successfully fetched {total} rows."
+                else f"Successfully fetched {total} rows."
+
             return build_response(True, msg, 200, results)
+
 
         return build_response(False, msg, 400)
 

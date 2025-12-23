@@ -16,7 +16,7 @@ from controller.admin_company_admin_register import admin_company_admin_register
 from middleware.dbContext import attach_company_db
 from controller.superadmin_login import superadmin_login_controller
 from controller.company_login import company_login_controller
-
+from controller.aggregation_controller import execute_aggregation_controller
 
 # app = Flask(__name__,
 #     static_url_path="/uploads",
@@ -107,6 +107,12 @@ def admin_company_admin_register_route():
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_ROOT, filename)
+
+@app.route("/aggregation", methods=["POST"])
+def aggregation_api_route():
+    return execute_aggregation_controller()
+
+
 # Run the Flask Server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3008, debug=True)
