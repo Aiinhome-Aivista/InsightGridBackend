@@ -730,6 +730,91 @@ def fetch_existing_user_tables_with_schema(cursor, session_id, created_by):
         "table_dropdown": dropdown
     }
 
+# Strict row-level validation.
+    # If ANY row fails → return errors.
+def validate_rows_strict(df: pd.DataFrame, schema: list):
+    errors = []
+
+    schema_map = {c["column"]: c for c in schema}
+
+    for idx, row in df.iterrows():
+        for col, rule in schema_map.items():
+            val = row.get(col)
+
+            dtype = (rule.get("datatype") or "").upper()
+
+            # -------- NULL CHECK --------
+            if rule.get("primary") and val in (None, ""):
+                errors.append({
+                    "row": int(idx + 1),
+                    "column": col,
+                    "error": "PRIMARY KEY cannot be NULL"
+                })
+
+            # -------- INT --------
+            if dtype in ("INT", "INTEGER", "BIGINT"):
+                if val is not None:
+                    try:
+                        int(val)
+                    except:
+                        errors.append({
+                            "row": int(idx + 1),
+                            "column": col,
+                            "error": "Invalid integer value"
+                        })
+
+            # -------- DECIMAL / FLOAT --------
+            if dtype in ("FLOAT", "DOUBLE") or dtype.startswith("DECIMAL"):
+                if val is not None:
+                    try:
+                        float(val)
+                    except:
+                        errors.append({
+                            "row": int(idx + 1),
+                            "column": col,
+                            "error": "Invalid numeric value"
+                        })
+
+            # -------- DATE --------
+            if dtype == "DATE":
+                if val is None:
+                    errors.append({
+                        "row": int(idx + 1),
+                        "column": col,
+                        "error": "Invalid DATE format"
+                    })
+
+        # 🚨 stop early if too many errors
+        if len(errors) >= 20:
+            break
+
+    return errors
+
+def build_validation_message(row_errors):
+    if not row_errors:
+        return "Validation failed."
+
+    # collect unique error types
+    columns = set()
+    error_types = set()
+
+    for err in row_errors:
+        columns.add(err.get("column"))
+        error_types.add(err.get("error"))
+
+    # single column, single error
+    if len(columns) == 1 and len(error_types) == 1:
+        col = next(iter(columns))
+        err = next(iter(error_types))
+        return f"{err} found in column '{col}'. Batch aborted."
+
+    # multiple errors
+    return (
+        f"Multiple validation errors found in {len(row_errors)} rows. "
+        f"Batch insert/update aborted."
+    )
+
+
 # -------------------------
 # Main single-endpoint handler
 # -------------------------
@@ -1199,8 +1284,33 @@ def upload_and_insights_new_controller():
             df_clean = normalize_boolean_columns(df_clean)
 
             # ✅ FIX: normalize DATE columns using schema
-            if schema:
-                df_clean = normalize_date_columns(df_clean, schema)
+            # if schema:
+            #     df_clean = normalize_date_columns(df_clean, schema)
+            
+            if not schema:
+                cur.close()
+                return build_response(
+                False,
+                "Schema is required for data insertion",
+                400
+             )
+            df_clean = normalize_date_columns(df_clean, schema)
+            #  STRICT ROW-LEVEL VALIDATION (MISSING PART)
+            row_errors = validate_rows_strict(df_clean, schema)
+            #  IF ANY ROW FAILS → ABORT FULL BATCH
+            dynamic_message = build_validation_message(row_errors)
+            if row_errors:
+                cur.close()
+                return build_response(
+                    False,
+                    dynamic_message,
+                    400,
+                    {
+                        "total_errors": len(row_errors),
+                        "sample_errors": row_errors[:10]
+                    }
+                )
+            
             # Add row_hash
             df_clean["row_hash"] = df_clean.apply(lambda r: _make_row_hash(r.values), axis=1)
 
