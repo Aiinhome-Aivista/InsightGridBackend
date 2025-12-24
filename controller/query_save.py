@@ -132,7 +132,28 @@
 from flask import request, g
 from helper.helperFunctions import build_response
 import json
+import re
 
+def extract_select_sql(ai_response):
+    if not ai_response:
+        return None
+    clean = ai_response.replace("DELIMITER ;;", "").replace("DELIMITER ;", "")
+    clean = re.sub(r"CREATE\s+PROCEDURE[\s\S]*?BEGIN", "", clean, flags=re.I)
+    clean = re.sub(r"\bEND\b\s*;?", "", clean, flags=re.I)
+    m = re.search(r"(SELECT[\s\S]*?);", clean, flags=re.I)
+    return m.group(1).strip() if m else None
+
+
+def extract_tables(sql):
+    if not sql:
+        return []
+    found = re.findall(r"\bFROM\s+(\w+)|\bJOIN\s+(\w+)", sql, re.I)
+    tables = set()
+    for f in found:
+        for t in f:
+            if t:
+                tables.add(t.lower())
+    return list(tables)
 
 def is_new_message(query_id):
     try:
@@ -165,6 +186,9 @@ def query_save_controller():
         for idx, msg in enumerate(messages):
 
             query_id = msg.get("query_id")
+            ai_response = msg.get("ai_response")
+            executable_sql = extract_select_sql(ai_response)
+            table_names = extract_tables(executable_sql)
 
             if not is_new_message(query_id):
                 continue
@@ -177,9 +201,9 @@ def query_save_controller():
                     query_title,
                     query_id,
                     msg.get("query"),
-                    msg.get("ai_response"),
-                    msg.get("ai_response"),
-                    json.dumps([]),
+                    ai_response,
+                    executable_sql,              # ✅ SQL
+                    json.dumps(table_names), 
                     msg.get("is_execute", 0),
                     msg.get("is_success", 0),
                     msg.get("row_count", 0),
@@ -199,9 +223,9 @@ def query_save_controller():
                     query_title,
                     query_id,
                     msg.get("query"),
-                    msg.get("ai_response"),
-                    msg.get("ai_response"),
-                    json.dumps([]),
+                    ai_response,
+                    executable_sql,              # ✅ SQL
+                    json.dumps(table_names), 
                     msg.get("is_execute", 0),
                     msg.get("is_success", 0),
                     msg.get("row_count", 0),

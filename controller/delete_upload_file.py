@@ -1,5 +1,4 @@
-from flask import request
-from database.dbConnection import get_db_connection
+from flask import request,g
 from helper.helperFunctions import build_response
 
 
@@ -24,7 +23,7 @@ def delete_uploaded_file_controller():
                 400
             )
 
-        conn = get_db_connection()
+        conn = g.company_db
         cursor = conn.cursor(dictionary=True)
 
         # -------------------------------
@@ -95,6 +94,5 @@ def delete_uploaded_file_controller():
     finally:
         if cursor:
             cursor.close()
-        if conn:
-            conn.close()
+        
 

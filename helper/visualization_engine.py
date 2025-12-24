@@ -65,6 +65,20 @@ def group_filter_support(col_type):
         }
     return {}
 
+def is_groupby_allowed(column_name: str, column_type: str) -> bool:
+    # ❌ ID column group by হবে না
+    if is_id_column(column_name):
+        return False
+
+    # ❌ Numeric column group by হবে না
+    if column_type in NUMERIC_TYPES:
+        return False
+
+    # ✅ Text / Date column group by হবে
+    if column_type in TEXT_TYPES or column_type in DATE_TYPES:
+        return True
+
+    return False
 
 # def suggest_charts_llm(column_meta):
 #     prompt = f"""
@@ -107,6 +121,44 @@ Return ONLY JSON:
     except Exception:
         return {"possible_charts": ["bar"]}
 
+# def build_insights(table_name, columns):
+#     col_types = get_column_types(table_name)
+
+#     aggregations = {}
+#     group_by = []
+#     filters = {}
+
+#     for col in columns:
+
+#         #  BLOCK ID COLUMNS
+#         if is_id_column(col):
+#             continue
+
+#         ctype = col_types.get(col)
+#         if not ctype:
+#             continue
+
+#         aggregations[col] = aggregation_support(ctype)
+
+
+#         gf = group_filter_support(ctype)
+#         if gf.get("group_by"):
+#             group_by.append(col)
+#         if gf.get("filter"):
+#             filters[col] = gf["filter"]
+
+#     charts = suggest_charts_llm(col_types)
+
+#     return {
+#         "column_types": col_types,
+#         "aggregations": aggregations,
+#         "group_by": group_by,
+#         "filters": filters,
+#         "charts": charts
+#     }
+
+
+
 def build_insights(table_name, columns):
     col_types = get_column_types(table_name)
 
@@ -116,7 +168,7 @@ def build_insights(table_name, columns):
 
     for col in columns:
 
-        #  BLOCK ID COLUMNS
+        # ❌ ID বাদ
         if is_id_column(col):
             continue
 
@@ -124,12 +176,14 @@ def build_insights(table_name, columns):
         if not ctype:
             continue
 
+        # aggregation support
         aggregations[col] = aggregation_support(ctype)
 
+        # ✅ FIXED GROUP BY RULE
+        if is_groupby_allowed(col, ctype):
+            group_by.append(col)
 
         gf = group_filter_support(ctype)
-        if gf.get("group_by"):
-            group_by.append(col)
         if gf.get("filter"):
             filters[col] = gf["filter"]
 
@@ -138,8 +192,11 @@ def build_insights(table_name, columns):
     return {
         "column_types": col_types,
         "aggregations": aggregations,
-        "group_by": group_by,
+        "group_by": sorted(group_by, key=str.lower),
         "filters": filters,
         "charts": charts
     }
+    
+    
+    
 

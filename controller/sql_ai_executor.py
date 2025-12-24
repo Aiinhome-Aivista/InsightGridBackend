@@ -3,7 +3,7 @@ import re
 from flask import request,g
 from helper.helperFunctions import build_response
 from model.llm_client import call_llm
-from helper.visualization_engine import build_insights
+from helper.visualization_engine import build_insights,is_groupby_allowed,get_column_types
 import time
 COLUMN_SYNONYMS = {
     "blood group": "blood_group",
@@ -316,9 +316,13 @@ def run_select_query(select_query):
         cursor = conn.cursor(dictionary=True)
 
         start_time = time.time()   # ⏱️ START
+        # g.last_used_table = extract_main_table_from_query(select_query)
         g.last_used_table = extract_main_table_from_query(select_query)
+        select_query = sanitize_group_by(select_query, g.last_used_table)
 
         cursor.execute(select_query)
+
+        # cursor.execute(select_query)
         rows = cursor.fetchall()
         
           #  REMOVE row_hash FROM ROW DATA
@@ -352,6 +356,41 @@ def extract_main_table_from_query(sql):
     match = re.search(r"\bFROM\s+`?(\w+)`?", sql, re.IGNORECASE)
     return match.group(1) if match else None
 
+def sanitize_group_by(select_sql: str, table_name: str):
+       # 🔥 aggregation না থাকলে GROUP BY তুলে দাও
+    if not is_aggregation_query(select_sql):
+        return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+
+    col_types = get_column_types(table_name)
+
+    match = re.search(r"GROUP BY\s+(.*)", select_sql, re.IGNORECASE)
+    if not match:
+        return select_sql
+
+    group_cols = [
+        c.strip().replace("`", "")
+        for c in match.group(1).split(",")
+    ]
+
+    safe_cols = []
+    for col in group_cols:
+        col_name = col.split(".")[-1]
+        ctype = col_types.get(col_name)
+
+        if ctype and is_groupby_allowed(col_name, ctype):
+            safe_cols.append(col)
+
+    # ❌ valid group by না থাকলে → পুরো GROUP BY remove
+    if not safe_cols:
+        return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+
+    safe_group = "GROUP BY " + ", ".join(safe_cols)
+    return re.sub(
+        r"GROUP BY\s+.*",
+        safe_group,
+        select_sql,
+        flags=re.IGNORECASE
+    )
 
 def execute_sql_endpoint_controller():
     try:
