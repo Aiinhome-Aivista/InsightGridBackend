@@ -389,10 +389,13 @@ def create_stored_procedures(db_name):
             r.report_name,
             r.query_history_id,          -- VERY IMPORTANT
             r.row_affected,
+            r.report_config,
             r.created_at,
             TIME_FORMAT(r.created_at, '%h:%i %p') AS actual_created_at,
             DATE_FORMAT(r.created_at, '%d-%m-%Y') AS actual_created_date,
-
+            r.updated_at,
+            TIME_FORMAT(r.updated_at, '%h:%i %p') AS actual_saved_at,
+            DATE_FORMAT(r.updated_at, '%d-%m-%Y') AS actual_saved_date,
             q.query_title,
             q.ai_response
 
@@ -610,6 +613,7 @@ def create_stored_procedures(db_name):
         IN p_report_name VARCHAR(255),
         IN p_query_history_id INT,
         IN p_row_affected INT,
+        IN p_report_config JSON, 
         OUT p_action VARCHAR(20)   -- INSERT / UPDATE / EXISTS
     )
     BEGIN
@@ -630,26 +634,21 @@ def create_stored_procedures(db_name):
         IF v_existing_query IS NULL THEN
 
             INSERT INTO saved_reports
-            (report_id, session_id, user_id, report_name, query_history_id, row_affected)
+            (report_id, session_id, user_id, report_name, query_history_id, row_affected,report_config)
             VALUES
-            (p_report_id, p_session_id, p_user_id, p_report_name, p_query_history_id, p_row_affected);
+            (p_report_id, p_session_id, p_user_id, p_report_name, p_query_history_id, p_row_affected, p_report_config);
 
             SET p_action = 'INSERT';
 
-        -- CASE 2: Same query → EXISTS
-       
-       ELSEIF v_existing_query = p_query_history_id
-       AND v_existing_name = p_report_name THEN
-       SET p_action = 'EXISTS';
-
-
-        -- CASE 3: Different query → UPDATE
+    
+      -- CASE 3: Different query → UPDATE
         ELSE
             UPDATE saved_reports
             SET
                 report_name = p_report_name,
                 query_history_id = p_query_history_id,
                 row_affected = p_row_affected,
+                 report_config = p_report_config, 
                 updated_at = NOW()
             WHERE report_id = p_report_id
             AND session_id = p_session_id
@@ -660,7 +659,11 @@ def create_stored_procedures(db_name):
 
     END
     """)
-
+#   -- CASE 2: Same query → EXISTS
+       
+#        ELSEIF v_existing_query = p_query_history_id
+#        AND v_existing_name = p_report_name THEN
+#        SET p_action = 'EXISTS';
     # ============================================================
     # sp_save_query
     # ============================================================
@@ -1040,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
         report_name VARCHAR(255),
         query_history_id INT,
         row_affected INT,
-
+        report_config JSON,
         user_id VARCHAR(100),
         session_id VARCHAR(100),
 

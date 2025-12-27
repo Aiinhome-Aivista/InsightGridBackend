@@ -1,4 +1,5 @@
 
+import json
 from flask import request,g
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response  
@@ -12,8 +13,8 @@ def save_report_controller():
         report_id = data.get("report_id")
         report_name = data.get("report_name")
         query_history_id = data.get("query_history_id")
-
-        if not all([session_id, user_id, report_id, report_name, query_history_id]):
+        report_config = data.get("report_config")
+        if not all([session_id, user_id, report_id, report_name, query_history_id,report_config]):
             return build_response(False, "Missing required fields", 400)
      
         # -----------------------------
@@ -75,6 +76,7 @@ def save_report_controller():
             report_name,
             query_history_id,
             rows_effected,
+            json.dumps(report_config),
             None   # OUT param
         ]
 
@@ -140,11 +142,13 @@ def report_list_controller():
                 "report_id": r["report_id"],
                 "report_name": r["report_name"],
                 "row_affected": r["row_affected"],
+                "report_config":r["report_config"], 
                 "group_by": [],
                 "created_at": r["created_at"],
                 "actual_created_at": r["actual_created_at"],
                 "actual_created_date": r["actual_created_date"],
-
+                "actual_saved_at": r["actual_saved_at"],
+                "actual_saved_date": r["actual_saved_date"],
                 # ADDITION (non-breaking)
                 "query_history_id": r["query_history_id"],
 
