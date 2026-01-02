@@ -1372,6 +1372,13 @@ def upload_and_insights_new_controller():
             # --------------------------------------
             try:
                 insights_list = generate_insights_from_llm(df_clean, file_name)
+                # 🔐 FORCE ARRAY ONLY
+                if isinstance(insights_list, dict):
+                    insights_list = insights_list.get("insights", [])
+
+                if not isinstance(insights_list, list):
+                    insights_list = []
+
                 insights_json = json.dumps(insights_list)
                 insight_status = "done"
             except:

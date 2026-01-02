@@ -32,7 +32,7 @@ def generate_company_code(company_name, cursor):
             domain = domain_map[w]
             break
 
-    year = datetime.now().strftime("%y")  # 25
+    base_code = f"{prefix}{domain}"
 
     cursor.execute("""
         SELECT company_code
@@ -40,13 +40,13 @@ def generate_company_code(company_name, cursor):
         WHERE company_code LIKE %s
         ORDER BY id DESC
         LIMIT 1
-    """, (f"{prefix}{domain}{year}%",))
+    """, (f"{base_code}%",))
 
     last = cursor.fetchone()
 
     seq = int(last["company_code"][-3:]) + 1 if last else 1
 
-    return f"{prefix}{domain}{year}{str(seq).zfill(3)}"
+    return f"{base_code}{str(seq).zfill(3)}"
 
 # ==========================================================
 # ENV CONFIG
@@ -847,42 +847,34 @@ def admin_company_register_controller():
         # compute company code
         company_code = generate_company_code(company_name, master_cursor)
         company_db_name = f"sahaj_cmp_{company_code}"
-
-        # check duplicate company
-        # master_cursor.execute(
-        #     "SELECT id FROM companies WHERE company_code=%s",
-        #     (company_code,)
-        # )
-        # if master_cursor.fetchone():
-        #     return build_response(False, "Company already exists", 400)
-        master_cursor.execute("""
-        SELECT id FROM companies
-        WHERE company_name = %s
-        AND YEAR(created_at) = YEAR(CURDATE())
-        """, (company_name,))
-        if master_cursor.fetchone():
-            return build_response(False, "Company already registered this year", 400)
-
-        # insert company
-        master_cursor.execute("""
-            INSERT INTO companies
-            (company_name, company_code, company_email, phone_number, address,
-             subscription_type, from_date, to_date, company_db_name)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (
-           company_name,
-            company_code,
-            company_email,
-            phone_number,
-            address,
-            subscription_type,
-            from_date,
-            to_date,
-            company_db_name
-        ))
-        master.commit()
-        company_id = master_cursor.lastrowid
-       # 🔹 SAVE LOGO
+        try:
+            # insert company
+            master_cursor.execute("""
+                INSERT INTO companies
+                (company_name, company_code, company_email, phone_number, address,
+                subscription_type, from_date, to_date, company_db_name)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+            company_name,
+                company_code,
+                company_email,
+                phone_number,
+                address,
+                subscription_type,
+                from_date,
+                to_date,
+                company_db_name
+            ))
+            master.commit()
+            company_id = master_cursor.lastrowid
+        except mysql.connector.IntegrityError:
+            master.rollback()
+            return build_response(
+                False,
+                "Company already exists. Please retry with some other.",
+                409
+            )    
+        # 🔹 SAVE LOGO
         if logo_file:
             company_folder = os.path.join(
                 UPLOAD_FOLDER,

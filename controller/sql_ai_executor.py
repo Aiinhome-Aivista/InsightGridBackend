@@ -97,7 +97,8 @@ def is_safe_select(sql):
         return False
 
     # block only whole forbidden keywords
-    forbidden_pattern = r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE)\b"
+    # forbidden_pattern = r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE)\b"
+    forbidden_pattern = r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE|SHOW|COMMIT|ROLLBACK|SAVEPOINT|SET)\b"
 
     if re.search(forbidden_pattern, sql, re.IGNORECASE):
         return False
@@ -243,6 +244,12 @@ IMPLICIT FILTER RULES:
   (e.g., 'name Ali', 'customer Ali', 'status pending'),
   automatically convert it into SQL using LIKE '%value%'.
 - Do not output explanation or reasoning; only generate SQL inside the stored procedure.
+ABSOLUTE SECURITY RULES:
+- NEVER generate SHOW queries
+- NEVER generate CREATE / DROP / ALTER
+- NEVER generate INSERT / UPDATE / DELETE
+- NEVER generate COMMIT / ROLLBACK / SAVEPOINT
+- NEVER generate SET TRANSACTION or SET commands
 
 ------------------------------------
 """
@@ -254,6 +261,23 @@ IMPLICIT FILTER RULES:
         # ======================================================
         final_prompt = system_instruction + "\n" + user_prompt
         ai_sql = call_llm(final_prompt).strip()
+        select_query = extract_select_query(ai_sql)
+
+        # 1️⃣ must extract ONE SELECT
+        if not select_query:
+            return build_response(
+                False,
+                "Invalid SQL generated. Only one SELECT statement is allowed.",
+                400
+            )
+
+        # 2️⃣ block DDL / DML / TCL / SET / non-SELECT
+        if not is_safe_select(select_query):
+            return build_response(
+                False,
+                "Unsafe SQL generated. Only read-only SELECT queries are allowed.",
+                400
+            )
 
         # ======================================================
         # STEP 5 — Response
