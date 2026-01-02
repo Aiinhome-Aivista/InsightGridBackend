@@ -55,6 +55,8 @@ MASTER_DB_HOST = os.getenv("DB_HOST")
 MASTER_DB_USER = os.getenv("DB_USER")
 MASTER_DB_PASS = os.getenv("DB_PASSWORD")
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER")
+DB_CHARSET = os.getenv("DB_DEFAULT_CHARSET", "utf8mb4")
+DB_ENGINE = os.getenv("DB_ENGINE", "InnoDB")
 
 
 # ==========================================================
@@ -908,7 +910,7 @@ def admin_company_register_controller():
             master.commit()
 
         # create company database
-        master_cursor.execute(f"CREATE DATABASE `{company_db_name}`")
+        master_cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{company_db_name}`")
         master.commit()
 
         master_cursor.close()
@@ -926,12 +928,12 @@ def admin_company_register_controller():
         c = company_conn.cursor()
 
                # ---------------- USER ROLES ----------------
-        c.execute("""
+        c.execute(f"""
 CREATE TABLE IF NOT EXISTS user_roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     role_name VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
+)ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
 """)
 
 # Default roles
@@ -950,7 +952,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
     # ---------------- USERS ----------------
         # ---------------- USERS (COMPANY DB) ----------------
-        c.execute("""
+        c.execute(f"""
         CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -969,11 +971,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
     updated_by VARCHAR(50),
     updated_at DATETIME DEFAULT NULL
-)
+)ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
 """)
     
     # ---------------- UPLOADED FILES ----------------
-        c.execute("""
+        c.execute(f"""
     CREATE TABLE IF NOT EXISTS uploaded_files (
         id INT AUTO_INCREMENT PRIMARY KEY,
         session_id VARCHAR(100),
@@ -1000,11 +1002,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL
-    )
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """)
 
     # ---------------- QUERY HISTORY ----------------
-        c.execute("""
+        c.execute(f"""
     CREATE TABLE IF NOT EXISTS query_history (
            id INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -1032,11 +1034,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NULL,
             updated_by VARCHAR(100) NULL
-        )
+        )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
         """)
 
     # ---------------- SAVED REPORTS ----------------
-        c.execute("""
+        c.execute(f"""
     CREATE TABLE IF NOT EXISTS saved_reports (
         id INT AUTO_INCREMENT PRIMARY KEY,
         report_id VARCHAR(100),
@@ -1049,7 +1051,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL
-    )
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """)
         company_conn.commit()
         c.close()
