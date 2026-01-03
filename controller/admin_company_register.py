@@ -1045,6 +1045,22 @@ CREATE TABLE IF NOT EXISTS user_roles (
         updated_at TIMESTAMP NULL
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """)
+        
+        
+    # ---------------- upload progress----------------
+        c.execute(f"""     
+        CREATE TABLE upload_progress (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(100),
+        file_name VARCHAR(255),
+        file_hash CHAR(32),
+        processed_rows BIGINT DEFAULT 0,
+        total_rows BIGINT DEFAULT 0,
+        status VARCHAR(20),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_progress_hash (file_hash)
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+    """)
         company_conn.commit()
         c.close()
         company_conn.close()

@@ -26,7 +26,8 @@ from helper.helperFunctions import (
     build_response,
     format_file_size,
     allowed_file,
-    get_upload_folder
+    get_upload_folder,
+    make_file_hash
 )
 from model.llm_client import call_llm
 
@@ -1238,229 +1239,570 @@ def upload_and_insights_new_controller():
         # --------------------------
         # ACTION: insert_data
         # --------------------------
+    #     if action == "insert_data":
+    #         file_name = body.get("file_name")
+    #         file_name = os.path.basename(file_name)  # ✅ ADD THIS LINE
+    #         table_name = body.get("table_name")
+    #         is_existing = bool(body.get("is_existing", False))
+    #         schema = body.get("schema")  # Only required for new table creation
+
+    #         if not file_name or not table_name:
+    #             cur.close()
+    #             return build_response(False, "file_name and table_name required", 400)
+
+    #         # --- Load CSV ---
+    #         path = os.path.join(UPLOAD_FOLDER, file_name)
+    #         if not os.path.exists(path):
+    #             cur.close()
+    #             return build_response(False, "CSV file missing", 400)
+
+    #         # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+    #         # df.columns = clean_column_names(df.columns)
+    #         has_header = body.get("has_header", True)
+
+    #         # # ❗ validate scenario
+    #         # try:
+    #         #     validate_header_vs_table(has_header, is_existing)
+    #         # except ValueError as e:
+    #         #     cur.close(); db.close()
+    #         #     return build_response(False, str(e), 400)
+
+    #         df = load_csv(path, has_header)
+
+    #         if not has_header:
+    #             df = apply_default_headers(df)
+
+    #         df.columns = clean_column_names(df.columns)
+    #         df = df.where(pd.notnull(df), None)
+
+    #         df = df.where(pd.notnull(df), None)
+
+    #         actual_rows = df.shape[0]
+    #         actual_columns = df.shape[1]
+            
+    #         # --- Clean & Normalize ---
+    #         df_clean = df.drop_duplicates().dropna(how="all")
+    #         df_clean = normalize_boolean_columns(df_clean)
+
+    #         # ✅ FIX: normalize DATE columns using schema
+    #         # if schema:
+    #         #     df_clean = normalize_date_columns(df_clean, schema)
+            
+    #         if not schema:
+    #             cur.close()
+    #             return build_response(
+    #             False,
+    #             "Schema is required for data insertion",
+    #             400
+    #          )
+    #         df_clean = normalize_date_columns(df_clean, schema)
+    #         #  STRICT ROW-LEVEL VALIDATION (MISSING PART)
+    #         row_errors = validate_rows_strict(df_clean, schema)
+    #         #  IF ANY ROW FAILS → ABORT FULL BATCH
+    #         dynamic_message = build_validation_message(row_errors)
+    #         if row_errors:
+    #             cur.close()
+    #             return build_response(
+    #                 False,
+    #                 dynamic_message,
+    #                 400,
+    #                 {
+    #                     "total_errors": len(row_errors),
+    #                     "sample_errors": row_errors[:10]
+    #                 }
+    #             )
+            
+    #         # Add row_hash
+    #         df_clean["row_hash"] = df_clean.apply(lambda r: _make_row_hash(r.values), axis=1)
+
+    #         total_rows = df_clean.shape[0]
+    #         # total_cols = df_clean.shape[1]
+    #         total_cols = len([
+    #             c for c in df_clean.columns
+    #             if c.lower() != "row_hash"
+    #         ])
+
+    #         # --------------------------------------
+    #         # NEW TABLE → CREATE TABLE USING UI SCHEMA
+    #         # --------------------------------------
+    #         # INSERT / UPSERT → both new and existing
+    #         # --------------------------------------
+    #         company_db = g.company_db
+
+    #         cur3 = company_db.cursor(dictionary=True)
+
+    #         try:
+    #             # 🔹 BEFORE INSERT: get existing row count
+    #             cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+    #             before_rows = cur3.fetchone()["cnt"]
+
+    #             upsert_df_to_table(cur3, table_name, df_clean)
+    #             company_db.commit()
+    #             #  AFTER upsert_df_to_table + commit
+    #             # cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+    #             # db_total_rows = cur3.fetchone()["cnt"]
+
+    #             # total_rows = db_total_rows   # ✅ OVERRIDE CSV COUNT
+    #             # 🔹 AFTER INSERT: get updated row count
+    #             cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+    #             after_rows = cur3.fetchone()["cnt"]
+    #             new_rows = max(0, after_rows - before_rows)
+
+    #             total_rows = after_rows
+    #             insert_status = "done"
+    #         except Exception as e:
+    #             company_db.rollback()
+    #             insert_status = "failed"
+    #             cur3.close()
+    #             cur.close()
+    #             return build_response(False, f"Insert failed: {str(e)}", 500)
+                
+                
+    #         # --------------------------------------
+    #         # 🔥 REFRESH QUERY ROW COUNTS (HERE)
+    #         # --------------------------------------
+    #         try:
+    #             cur3.callproc("sp_refresh_query_row_counts")
+    #             company_db.commit()
+    #         except Exception as e:
+    #             # ❗ data insert already successful, so don't fail main flow
+    #             print("Row count refresh failed:", str(e))
+
+    #         # --------------------------------------
+    #         # Generate LLM insights
+    #         # --------------------------------------
+    #         try:
+    #             insights_list = generate_insights_from_llm(df_clean, file_name)
+    #             #  FORCE ARRAY ONLY
+    #             if isinstance(insights_list, dict):
+    #                 insights_list = insights_list.get("insights", [])
+
+    #             if not isinstance(insights_list, list):
+    #                 insights_list = []
+
+    #             insights_json = json.dumps(insights_list)
+    #             insight_status = "done"
+    #         except:
+    #             insights_json = "[]"
+    #             insight_status = "failed"
+
+    #         # --------------------------------------
+    #         # CALL STORED PROCEDURE (metadata)
+    #         # --------------------------------------
+    #         try:
+    #             cur3.callproc("sp_insert_uploaded_file", [
+    #                 session_id,
+    #                 file_name,
+    #                 table_name,
+    #                 format_file_size(os.path.getsize(path)),
+    #                 "csv",
+    #                 actual_rows,          # ✅ NEW
+    #                 actual_columns, 
+    #                 total_rows,
+    #                 total_cols,
+    #                 created_by,
+    #                 "done",
+    #                 "done",
+    #                 insights_json,
+    #                 insight_status,
+    #                 insert_status,
+    #                 new_rows  
+    #             ])
+
+    #             sp_result = None
+    #             for r in cur3.stored_results():
+    #                 row = r.fetchone()
+    #                 if row:
+    #                     sp_result = row
+    #                     break
+
+    #             if sp_result and isinstance(sp_result, dict):
+    #                 file_id = sp_result.get("file_id")
+    #                 status_flag = sp_result.get("status_flag")
+    #             else:
+    #                 file_id = None
+    #                 status_flag = "UNKNOWN"
+
+    #             company_db.commit()
+
+    #         except Exception as e:
+    #             company_db.rollback()
+    #             cur3.close()
+    #             cur.close()
+    #             return build_response(False, f"Procedure failed: {str(e)}", 500)
+
+    #         cur3.close()
+    #         cur.close()
+    #         if not is_existing:
+    #             summary_message = (
+    #                 f"Table `{table_name}` successfully created with "
+    #                 f"{total_cols} columns and {total_rows} rows."
+    #             )
+    #         else:
+    #             if new_rows > 0:
+    #                 summary_message = (
+    #                     f"Table `{table_name}` successfully updated with {total_cols} columns. "
+    #                     f"{new_rows} new rows added, total rows now {total_rows}."
+    #                 )
+    #             else:
+    #                 summary_message = (
+    #                     f"Table `{table_name}` already exists with {total_cols} columns. "
+    #                     f"No new data was available to insert; total rows remain {total_rows}."
+    #                 )
+
+
+    #         return build_response(True, "Data inserted", 200, {
+    #             "file_id": file_id,
+    #             "file_status": status_flag,
+    #             "table_name": table_name,
+    #             "total_rows": total_rows,
+    #             "total_columns": total_cols,
+    #             "summary_message": summary_message
+    #         })
+
+    #     # unknown action
+    #     cur.close()
+    #     return build_response(False, "Unknown action", 400)
+
+    # except Exception as ex:
+    #     try:
+    #         company_db.rollback()
+    #     except Exception:
+    #         pass
+    #     return build_response(False, "Server error", 500, {"error": str(ex)})
+
+
+
         if action == "insert_data":
-            file_name = body.get("file_name")
-            file_name = os.path.basename(file_name)  # ✅ ADD THIS LINE
-            table_name = body.get("table_name")
-            is_existing = bool(body.get("is_existing", False))
-            schema = body.get("schema")  # Only required for new table creation
+                file_name = body.get("file_name")
+                file_name = os.path.basename(file_name)  # ✅ ADD THIS LINE
+                table_name = body.get("table_name")
+                is_existing = bool(body.get("is_existing", False))
+                schema = body.get("schema")  # Only required for new table creation
 
-            if not file_name or not table_name:
-                cur.close()
-                return build_response(False, "file_name and table_name required", 400)
+                if not file_name or not table_name:
+                    cur.close()
+                    return build_response(False, "file_name and table_name required", 400)
 
-            # --- Load CSV ---
-            path = os.path.join(UPLOAD_FOLDER, file_name)
-            if not os.path.exists(path):
-                cur.close()
-                return build_response(False, "CSV file missing", 400)
+                # --- Load CSV ---
+                path = os.path.join(UPLOAD_FOLDER, file_name)
+                if not os.path.exists(path):
+                    cur.close()
+                    return build_response(False, "CSV file missing", 400)
 
-            # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
-            # df.columns = clean_column_names(df.columns)
-            has_header = body.get("has_header", True)
+                # df = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+                # df.columns = clean_column_names(df.columns)
+                has_header = body.get("has_header", True)
 
-            # # ❗ validate scenario
-            # try:
-            #     validate_header_vs_table(has_header, is_existing)
-            # except ValueError as e:
-            #     cur.close(); db.close()
-            #     return build_response(False, str(e), 400)
+                # # ❗ validate scenario
+                # try:
+                #     validate_header_vs_table(has_header, is_existing)
+                # except ValueError as e:
+                #     cur.close(); db.close()
+                #     return build_response(False, str(e), 400)
 
-            df = load_csv(path, has_header)
+                # df = load_csv(path, has_header)
 
-            if not has_header:
-                df = apply_default_headers(df)
+                # if not has_header:
+                #     df = apply_default_headers(df)
 
-            df.columns = clean_column_names(df.columns)
-            df = df.where(pd.notnull(df), None)
+                # df.columns = clean_column_names(df.columns)
+                # df = df.where(pd.notnull(df), None)
 
-            df = df.where(pd.notnull(df), None)
+                # df = df.where(pd.notnull(df), None)
 
-            actual_rows = df.shape[0]
-            actual_columns = df.shape[1]
-            
-            # --- Clean & Normalize ---
-            df_clean = df.drop_duplicates().dropna(how="all")
-            df_clean = normalize_boolean_columns(df_clean)
+                # actual_rows = df.shape[0]
+                # actual_columns = df.shape[1]
+                
+                # # --- Clean & Normalize ---
+                # df_clean = df.drop_duplicates().dropna(how="all")
+                # df_clean = normalize_boolean_columns(df_clean)
 
-            # ✅ FIX: normalize DATE columns using schema
-            # if schema:
-            #     df_clean = normalize_date_columns(df_clean, schema)
-            
-            if not schema:
-                cur.close()
-                return build_response(
-                False,
-                "Schema is required for data insertion",
-                400
-             )
-            df_clean = normalize_date_columns(df_clean, schema)
-            #  STRICT ROW-LEVEL VALIDATION (MISSING PART)
-            row_errors = validate_rows_strict(df_clean, schema)
-            #  IF ANY ROW FAILS → ABORT FULL BATCH
-            dynamic_message = build_validation_message(row_errors)
-            if row_errors:
-                cur.close()
-                return build_response(
-                    False,
-                    dynamic_message,
-                    400,
-                    {
-                        "total_errors": len(row_errors),
-                        "sample_errors": row_errors[:10]
-                    }
-                )
-            
-            # Add row_hash
-            df_clean["row_hash"] = df_clean.apply(lambda r: _make_row_hash(r.values), axis=1)
+                # # ✅ FIX: normalize DATE columns using schema
+                # if schema:
+                #     df_clean = normalize_date_columns(df_clean, schema)
+                # # Add row_hash
+                # df_clean["row_hash"] = df_clean.apply(lambda r: _make_row_hash(r.values), axis=1)
 
-            total_rows = df_clean.shape[0]
-            # total_cols = df_clean.shape[1]
-            total_cols = len([
-                c for c in df_clean.columns
-                if c.lower() != "row_hash"
-            ])
+                # total_rows = df_clean.shape[0]
+                # # total_cols = df_clean.shape[1]
+                # total_cols = len([
+                #     c for c in df_clean.columns
+                #     if c.lower() != "row_hash"
+                # ])
 
-            # --------------------------------------
-            # NEW TABLE → CREATE TABLE USING UI SCHEMA
-            # --------------------------------------
-            # INSERT / UPSERT → both new and existing
-            # --------------------------------------
-            company_db = g.company_db
+                # # --------------------------------------
+                # # NEW TABLE → CREATE TABLE USING UI SCHEMA
+                # # --------------------------------------
+                # # INSERT / UPSERT → both new and existing
+                # # --------------------------------------
+                # company_db = g.company_db
 
-            cur3 = company_db.cursor(dictionary=True)
+                # cur3 = company_db.cursor(dictionary=True)
 
-            try:
-                # 🔹 BEFORE INSERT: get existing row count
+                # try:
+                #     # 🔹 BEFORE INSERT: get existing row count
+                #     cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                #     before_rows = cur3.fetchone()["cnt"]
+
+                #     upsert_df_to_table(cur3, table_name, df_clean)
+                #     company_db.commit()
+                #     #  AFTER upsert_df_to_table + commit
+                #     # cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                #     # db_total_rows = cur3.fetchone()["cnt"]
+
+                #     # total_rows = db_total_rows   # ✅ OVERRIDE CSV COUNT
+                #     # 🔹 AFTER INSERT: get updated row count
+                #     cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                #     after_rows = cur3.fetchone()["cnt"]
+                #     new_rows = max(0, after_rows - before_rows)
+
+                #     total_rows = after_rows
+                #     insert_status = "done"
+                # except Exception as e:
+                #     company_db.rollback()
+                #     insert_status = "failed"
+                #     cur3.close()
+                #     cur.close()
+                #     return build_response(False, f"Insert failed: {str(e)}", 500)
+                    
+                # ================================
+                # 🔥 CHUNK BASED INSERT (SAFE)
+                # ================================
+
+                CSV_CHUNK_SIZE = 10000   # 10k per batch
+                company_db = g.company_db
+                cur3 = company_db.cursor(dictionary=True)
+
+                file_hash = make_file_hash(session_id, file_name)
+                with open(path, "r", encoding="utf-8-sig", errors="ignore") as f:
+                            estimated_total_rows = sum(1 for _ in f)
+                            if has_header:
+                                estimated_total_rows -= 1
+
+    # --- INIT PROGRESS ROW ---
+                cur3.execute("""
+    INSERT INTO upload_progress
+    (session_id, file_name, file_hash, processed_rows, total_rows, status)
+    VALUES (%s, %s, %s, 0, %s, 'started')
+    ON DUPLICATE KEY UPDATE
+        processed_rows=0,
+        total_rows=VALUES(total_rows),
+        status='started',
+        updated_at=NOW()
+    """, (session_id, file_name, file_hash, estimated_total_rows))
+
+
+                company_db.commit()
+                # company_db = g.company_db
+                # cur3 = company_db.cursor(dictionary=True)
+
+    # 🔹 BEFORE INSERT COUNT
                 cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
                 before_rows = cur3.fetchone()["cnt"]
 
-                upsert_df_to_table(cur3, table_name, df_clean)
-                company_db.commit()
-                #  AFTER upsert_df_to_table + commit
-                # cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
-                # db_total_rows = cur3.fetchone()["cnt"]
+                actual_rows = 0
+                actual_columns = 0
+                total_rows = 0
+                total_cols = 0
 
-                # total_rows = db_total_rows   # ✅ OVERRIDE CSV COUNT
-                # 🔹 AFTER INSERT: get updated row count
-                cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
-                after_rows = cur3.fetchone()["cnt"]
-                new_rows = max(0, after_rows - before_rows)
-
-                total_rows = after_rows
-                insert_status = "done"
-            except Exception as e:
-                company_db.rollback()
-                insert_status = "failed"
-                cur3.close()
-                cur.close()
-                return build_response(False, f"Insert failed: {str(e)}", 500)
-                
-                
-            # --------------------------------------
-            # 🔥 REFRESH QUERY ROW COUNTS (HERE)
-            # --------------------------------------
-            try:
-                cur3.callproc("sp_refresh_query_row_counts")
-                company_db.commit()
-            except Exception as e:
-                # ❗ data insert already successful, so don't fail main flow
-                print("Row count refresh failed:", str(e))
-
-            # --------------------------------------
-            # Generate LLM insights
-            # --------------------------------------
-            try:
-                insights_list = generate_insights_from_llm(df_clean, file_name)
-                #  FORCE ARRAY ONLY
-                if isinstance(insights_list, dict):
-                    insights_list = insights_list.get("insights", [])
-
-                if not isinstance(insights_list, list):
-                    insights_list = []
-
-                insights_json = json.dumps(insights_list)
-                insight_status = "done"
-            except:
-                insights_json = "[]"
-                insight_status = "failed"
-
-            # --------------------------------------
-            # CALL STORED PROCEDURE (metadata)
-            # --------------------------------------
-            try:
-                cur3.callproc("sp_insert_uploaded_file", [
-                    session_id,
-                    file_name,
-                    table_name,
-                    format_file_size(os.path.getsize(path)),
-                    "csv",
-                    actual_rows,          # ✅ NEW
-                    actual_columns, 
-                    total_rows,
-                    total_cols,
-                    created_by,
-                    "done",
-                    "done",
-                    insights_json,
-                    insight_status,
-                    insert_status,
-                    new_rows  
-                ])
-
-                sp_result = None
-                for r in cur3.stored_results():
-                    row = r.fetchone()
-                    if row:
-                        sp_result = row
-                        break
-
-                if sp_result and isinstance(sp_result, dict):
-                    file_id = sp_result.get("file_id")
-                    status_flag = sp_result.get("status_flag")
-                else:
-                    file_id = None
-                    status_flag = "UNKNOWN"
-
-                company_db.commit()
-
-            except Exception as e:
-                company_db.rollback()
-                cur3.close()
-                cur.close()
-                return build_response(False, f"Procedure failed: {str(e)}", 500)
-
-            cur3.close()
-            cur.close()
-            if not is_existing:
-                summary_message = (
-                    f"Table `{table_name}` successfully created with "
-                    f"{total_cols} columns and {total_rows} rows."
+                try:
+                    reader = pd.read_csv(
+                    path,
+                    dtype=str,
+                    encoding="utf-8-sig",
+                    chunksize=CSV_CHUNK_SIZE,
+                    header=0 if has_header else None
                 )
-            else:
-                if new_rows > 0:
+
+                    processed_rows = 0
+                    for chunk_index, df_chunk in enumerate(reader):
+
+            # ----------------------
+            # HEADER HANDLING
+            # ----------------------
+                        if not has_header:
+                            df_chunk = apply_default_headers(df_chunk)
+
+                        df_chunk.columns = clean_column_names(df_chunk.columns)
+                        df_chunk = df_chunk.where(pd.notnull(df_chunk), None)
+
+            # ----------------------
+            # STATS (first chunk only)
+            # ----------------------
+                        if chunk_index == 0:
+                            actual_columns = df_chunk.shape[1]
+
+                        actual_rows += df_chunk.shape[0]
+
+            # ----------------------
+            # CLEAN & NORMALIZE
+            # ----------------------
+                        df_chunk = df_chunk.drop_duplicates().dropna(how="all")
+                        df_chunk = normalize_boolean_columns(df_chunk)
+
+                        if schema:
+                            df_chunk = normalize_date_columns(df_chunk, schema)
+
+            # ----------------------
+            # ROW HASH (FAST)
+            # ----------------------
+                        df_chunk["row_hash"] = (
+                            df_chunk.astype(str)
+                            .fillna("")
+                            .agg("|".join, axis=1)
+                            .map(lambda x: hashlib.md5(x.encode()).hexdigest())
+                        )
+
+
+
+            # ----------------------
+            # INSERT THIS CHUNK
+            # ----------------------
+                        upsert_df_to_table(cur3, table_name, df_chunk)
+                        company_db.commit()
+                        processed_rows += df_chunk.shape[0]
+                        cur3.execute("""
+        UPDATE upload_progress
+        SET processed_rows=%s,
+            status='processing',
+            updated_at=NOW()
+        WHERE file_hash=%s
+    """, (processed_rows, file_hash))
+
+                        total_rows += df_chunk.shape[0]
+                        total_cols = len([c for c in df_chunk.columns if c.lower() != "row_hash"])
+
+                    cur3.execute("""
+    UPDATE upload_progress
+    SET status='done',
+        processed_rows=%s,
+        updated_at=NOW()
+    WHERE file_hash=%s
+    """, (processed_rows, file_hash))
+
+
+        # 🔹 AFTER INSERT COUNT
+                    cur3.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+                    after_rows = cur3.fetchone()["cnt"]
+
+                    new_rows = max(0, after_rows - before_rows)
+                    total_rows = after_rows
+                    insert_status = "done"
+
+                except Exception as e:
+                    company_db.rollback()
+                    insert_status = "failed"
+                    cur3.close()
+                    cur.close()
+                    return build_response(False, f"Insert failed: {str(e)}", 500)
+
+                # --------------------------------------
+                # 🔥 REFRESH QUERY ROW COUNTS (HERE)
+                # --------------------------------------
+                try:
+                    cur3.callproc("sp_refresh_query_row_counts")
+                    company_db.commit()
+                except Exception as e:
+                    # ❗ data insert already successful, so don't fail main flow
+                    print("Row count refresh failed:", str(e))
+
+                # --------------------------------------
+                # Generate LLM insights
+                # --------------------------------------
+                # try:
+                #     insights_list = generate_insights_from_llm(df_clean, file_name)
+                #     insights_json = json.dumps(insights_list)
+                #     insight_status = "done"
+                # except:
+                #     insights_json = "[]"
+                #     insight_status = "failed"
+
+                try:
+                    # 🔥 use LAST chunk sample only (safe)
+                    insights_list = generate_insights_from_llm(df_chunk, file_name)
+                    insights_json = json.dumps(insights_list)
+                    insight_status = "done"
+                except:
+                    insights_json = "[]"
+                    insight_status = "failed"
+                # --------------------------------------
+                # CALL STORED PROCEDURE (metadata)
+                # --------------------------------------
+                try:
+                    cur3.callproc("sp_insert_uploaded_file", [
+                        session_id,
+                        file_name,
+                        table_name,
+                        format_file_size(os.path.getsize(path)),
+                        "csv",
+                        actual_rows,          # ✅ NEW
+                        actual_columns, 
+                        total_rows,
+                        total_cols,
+                        created_by,
+                        "done",
+                        "done",
+                        insights_json,
+                        insight_status,
+                        insert_status,
+                        new_rows  
+                    ])
+
+                    sp_result = None
+                    for r in cur3.stored_results():
+                        row = r.fetchone()
+                        if row:
+                            sp_result = row
+                            break
+
+                    if sp_result and isinstance(sp_result, dict):
+                        file_id = sp_result.get("file_id")
+                        status_flag = sp_result.get("status_flag")
+                    else:
+                        file_id = None
+                        status_flag = "UNKNOWN"
+
+                    company_db.commit()
+
+                except Exception as e:
+                    company_db.rollback()
+                    cur3.close()
+                    cur.close()
+                    return build_response(False, f"Procedure failed: {str(e)}", 500)
+
+                cur3.close()
+                cur.close()
+                if not is_existing:
                     summary_message = (
-                        f"Table `{table_name}` successfully updated with {total_cols} columns. "
-                        f"{new_rows} new rows added, total rows now {total_rows}."
+                        f"Table `{table_name}` successfully created with "
+                        f"{total_cols} columns and {total_rows} rows."
                     )
                 else:
-                    summary_message = (
-                        f"Table `{table_name}` already exists with {total_cols} columns. "
-                        f"No new data was available to insert; total rows remain {total_rows}."
-                    )
+                    if new_rows > 0:
+                        summary_message = (
+                            f"Table `{table_name}` successfully updated with {total_cols} columns. "
+                            f"{new_rows} new rows added, total rows now {total_rows}."
+                        )
+                    else:
+                        summary_message = (
+                            f"Table `{table_name}` already exists with {total_cols} columns. "
+                            f"No new data was available to insert; total rows remain {total_rows}."
+                        )
 
 
-            return build_response(True, "Data inserted", 200, {
-                "file_id": file_id,
-                "file_status": status_flag,
-                "table_name": table_name,
-                "total_rows": total_rows,
-                "total_columns": total_cols,
-                "summary_message": summary_message
-            })
+                return build_response(True, "Data inserted", 200, {
+                    "file_id": file_id,
+                    "file_status": status_flag,
+                    "table_name": table_name,
+                    "total_rows": total_rows,
+                    "total_columns": total_cols,
+                    "summary_message": summary_message
+                })
 
 
-        # unknown action
+            # unknown action
+        
         cur.close()
         return build_response(False, "Unknown action", 400)
 
@@ -1470,3 +1812,36 @@ def upload_and_insights_new_controller():
         except Exception:
             pass
         return build_response(False, "Server error", 500, {"error": str(ex)})
+  
+
+# get_upload_progress_controller
+def get_upload_progress_controller():
+    data = request.get_json(force=True)
+    session_id = data.get("session_id")
+    file_name = data.get("file_name")
+
+    file_hash = make_file_hash(session_id, file_name)
+
+    cur = g.company_db.cursor(dictionary=True)
+    cur.execute("""
+        SELECT processed_rows, total_rows, status
+        FROM upload_progress
+        WHERE file_hash=%s
+    """, (file_hash,))
+
+    row = cur.fetchone()
+    cur.close()
+
+    if not row:
+        return build_response(False, "No progress found", 404)
+
+    percent = 0
+    if row["total_rows"] > 0:
+        percent = round(
+            (row["processed_rows"] / row["total_rows"]) * 100, 2
+        )
+
+    return build_response(True, "Progress", 200, {
+        **row,
+        "percent": percent
+    })

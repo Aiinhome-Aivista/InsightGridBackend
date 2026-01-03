@@ -3,6 +3,7 @@ import os
 from flask import jsonify,g
 from dotenv import load_dotenv
 import uuid
+import hashlib
 
 # ---------- Load Environment Variables ----------
 load_dotenv()
@@ -74,6 +75,10 @@ def allowed_logo(filename):
         "." in filename
         and filename.rsplit(".", 1)[1].lower() in ALLOWED_LOGO_EXT
     )
+    
+def make_file_hash(session_id, file_name):
+    return hashlib.md5(f"{session_id}|{file_name}".encode()).hexdigest()
+    
        
 
 

@@ -9,7 +9,7 @@ from controller.sql_ai_executor import chat_endpoint_controller,execute_sql_endp
 from controller.query_save import query_save_controller
 from controller.get_saved_query_response import get_saved_query_response_controller
 from controller.delete_upload_file import delete_uploaded_file_controller
-from controller.upload_file_new import upload_and_insights_new_controller
+from controller.upload_file_new import upload_and_insights_new_controller, get_upload_progress_controller as upload_progress_ctrl
 from controller.report_controller import save_report_controller, report_list_controller
 from controller.admin_company_register import admin_company_register_controller
 from controller.admin_company_admin_register import admin_company_admin_register_controller
@@ -107,6 +107,9 @@ def admin_company_admin_register_route():
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_ROOT, filename)
 
+@app.route("/get_upload_progress", methods=["POST"])
+def get_upload_progress_route():
+    return upload_progress_ctrl()
 
 # Run the Flask Server
 if __name__ == "__main__":
