@@ -3,6 +3,7 @@ from flask import request
 import uuid, bcrypt
 from database.dbConnection import get_master_db, get_company_db
 from helper.helperFunctions import build_response
+from helper.jwt_helper import generate_token
 
 
 def company_login_controller():
@@ -51,9 +52,9 @@ def company_login_controller():
         u.email
         FROM users u
         JOIN user_roles ur ON ur.id = u.app_role_id
-        WHERE u.email=%s
+        WHERE u.email=%s AND u.company_id=%s
     """,
-        (email,),
+        (email, company["id"]),
     )
     user = ccur.fetchone()
 
@@ -70,19 +71,30 @@ def company_login_controller():
     company_db.commit()
     # 🔴 ADD THIS BLOCK (AFTER company_db.commit())
 
+    # =========================
+    # JWT TOKEN GENERATION
+    # =========================
+    token = generate_token(
+        {
+            "user_id": user["user_id"],
+            "role": user["role_name"],
+            "company_id": company["id"],
+            "company_db": company["company_db_name"],
+            "scope": "company",
+        }
+    )
+
     mcur = master.cursor()
-    mcur.execute("""
+    mcur.execute(
+        """
         INSERT INTO user_company_sessions
         (session_id, user_id, company_id, company_db_name)
         VALUES (%s,%s,%s,%s)
         ON DUPLICATE KEY UPDATE
             company_db_name = VALUES(company_db_name)
-    """, (
-        session_id,
-        user["user_id"],
-        company["id"],
-        company["company_db_name"]
-    ))
+    """,
+        (session_id, user["user_id"], company["id"], company["company_db_name"]),
+    )
     master.commit()
     mcur.close()
 
@@ -93,14 +105,10 @@ def company_login_controller():
     #     "session_id": session_id
     # })
     # ---- build full logo url for PDF ----
-    base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
-    logo_path = company["company_logo"]        # /uploads/companies/...
+    base_url = request.host_url.rstrip("/")  # http://127.0.0.1:3008
+    logo_path = company["company_logo"]  # /uploads/companies/...
 
-    company_logo_url = (
-            f"{base_url}{logo_path}"
-            if logo_path else None
-        )
-
+    company_logo_url = f"{base_url}{logo_path}" if logo_path else None
 
     return build_response(
         True,
@@ -120,10 +128,11 @@ def company_login_controller():
             "company_email": company["company_email"],
             "company_address": company["address"],
             "company_logo": company["company_logo"],
-             "company_logo_url": company_logo_url,
+            "company_logo_url": company_logo_url,
             "company_phone": company["phone_number"],
             "subscription_type": company["subscription_type"],
             "subscription_from": str(company["from_date"]),
             "subscription_to": str(company["to_date"]),
+            "token": token,
         },
     )

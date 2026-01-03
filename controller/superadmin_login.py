@@ -3,6 +3,7 @@ from flask import request
 import uuid, bcrypt
 from database.dbConnection import get_master_db
 from helper.helperFunctions import build_response
+from helper.jwt_helper import generate_token
 
 def superadmin_login_controller():
     data = request.get_json() or {}
@@ -37,8 +38,21 @@ def superadmin_login_controller():
     )
     db.commit()
 
+    # return build_response(True, "Login successful", 200, {
+    #     "user_id": user["user_id"],
+    #     "role": "superadmin",
+    #     "session_id": session_id
+    # })
+    
+    token = generate_token({
+    "user_id": user["user_id"],
+    "role": "superadmin",
+    "scope": "master"
+    })
+
     return build_response(True, "Login successful", 200, {
         "user_id": user["user_id"],
         "role": "superadmin",
-        "session_id": session_id
+        "token": token
     })
+
