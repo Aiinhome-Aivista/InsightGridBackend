@@ -144,11 +144,18 @@ from database.dbConnection import get_master_db, get_company_db
 
 def attach_company_db():
     skip_routes = (
-        "hello_world",
-        "superadmin_login",
-        "company_login",
-        "admin_company_register_route",
-        "admin_company_admin_register_route",
+        # "hello_world",
+        # "superadmin_login",
+        # "company_login",
+        # "admin_company_register_route",
+        # "admin_company_admin_register_route",
+        "/",
+        "/superadmin/login",
+        "/company/login",
+        "/admin/company_register",
+        "/admin/company/admin_register",
+        "/admin/get_companies",
+    
     )
 
     if request.endpoint in skip_routes:
