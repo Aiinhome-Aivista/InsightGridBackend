@@ -47,17 +47,20 @@ from helper.jwt_middleware import jwt_protect
 
 
 def attach_company_db():
-    if request.method == "OPTIONS":
-            return
-    # 🔓 PUBLIC / AUTH ROUTES (NO JWT)
-    skip_routes = {
-        "hello_world",
-        "superadmin_login",
-        "company_login",
-        "admin_company_register_route",
-        "admin_company_admin_register_route",
-        "serve_uploads"
-    }
+    skip_routes = (
+        # "hello_world",
+        # "superadmin_login",
+        # "company_login",
+        # "admin_company_register_route",
+        # "admin_company_admin_register_route",
+        "/",
+        "/superadmin/login",
+        "/company/login",
+        "/admin/company_register",
+        "/admin/company/admin_register",
+        "/admin/get_companies",
+    
+    )
 
     if request.endpoint in skip_routes:
         return

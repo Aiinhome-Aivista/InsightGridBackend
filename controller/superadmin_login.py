@@ -18,7 +18,7 @@ def superadmin_login_controller():
     cur = db.cursor(dictionary=True)
 
     cur.execute("""
-        SELECT u.user_id, u.password_hash, u.session_id
+        SELECT u.user_id, u.password_hash, u.session_id, u.full_name
         FROM users u
         JOIN app_roles ar ON ar.id = u.app_role_id
         WHERE u.email=%s AND ar.role_name='superadmin'
@@ -53,6 +53,7 @@ def superadmin_login_controller():
     return build_response(True, "Login successful", 200, {
         "user_id": user["user_id"],
         "role": "superadmin",
-        "token": token
+        "session_id": session_id,
+        "full_name":user["full_name"],
     })
 

@@ -4,7 +4,7 @@ from flask import request
 import mysql.connector
 import os
 from database.dbConnection import get_master_db
-from helper.helperFunctions import build_response,allowed_logo
+from helper.helperFunctions import build_response, allowed_logo
 from datetime import datetime
 import re
 from werkzeug.utils import secure_filename
@@ -12,8 +12,9 @@ from werkzeug.utils import secure_filename
 
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
 
+
 def generate_company_code(company_name, cursor):
-    clean = re.sub(r'[^a-zA-Z ]', '', company_name).upper()
+    clean = re.sub(r"[^a-zA-Z ]", "", company_name).upper()
     words = clean.split()
 
     prefix = words[0][:3]
@@ -23,7 +24,7 @@ def generate_company_code(company_name, cursor):
         "TECH": "TEC",
         "TECHNOLOGY": "TEC",
         "SOLUTIONS": "SOL",
-        "SERVICES": "SRV"
+        "SERVICES": "SRV",
     }
 
     domain = "GEN"
@@ -34,19 +35,23 @@ def generate_company_code(company_name, cursor):
 
     base_code = f"{prefix}{domain}"
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT company_code
         FROM companies
         WHERE company_code LIKE %s
         ORDER BY id DESC
         LIMIT 1
-    """, (f"{base_code}%",))
+    """,
+        (f"{base_code}%",),
+    )
 
     last = cursor.fetchone()
 
     seq = int(last["company_code"][-3:]) + 1 if last else 1
 
     return f"{base_code}{str(seq).zfill(3)}"
+
 
 # ==========================================================
 # ENV CONFIG
@@ -67,7 +72,7 @@ def create_stored_procedures(db_name):
         host=MASTER_DB_HOST,
         user=MASTER_DB_USER,
         password=MASTER_DB_PASS,
-        database=db_name
+        database=db_name,
     )
     c = conn.cursor()
 
@@ -77,7 +82,8 @@ def create_stored_procedures(db_name):
     # sp_delete_uploaded_file
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_delete_uploaded_file")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_delete_uploaded_file(
         IN p_session_id VARCHAR(100),
         IN p_created_by VARCHAR(100),
@@ -213,13 +219,15 @@ def create_stored_procedures(db_name):
 
             SELECT 'Table and all related metadata deleted successfully' AS status;
     END
-    """)
+    """
+    )
 
     # =====================================================
     # sp_get_dashboard_data
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_dashboard_data")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_get_dashboard_data(
         IN p_session_id VARCHAR(50),
         IN p_created_by VARCHAR(50)
@@ -277,13 +285,15 @@ def create_stored_procedures(db_name):
         ORDER BY  COALESCE(updated_at, created_at) DESC
         LIMIT 1;
     END
-    """)
+    """
+    )
 
     # =====================================================
     # sp_get_full_table_info
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_full_table_info")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_get_full_table_info(
         IN p_created_by VARCHAR(100),
         IN p_session_id VARCHAR(100)
@@ -332,13 +342,15 @@ def create_stored_procedures(db_name):
         AND column_extraction_status = 'done'
         AND data_insights_status = 'done';
     END
-    """)
+    """
+    )
 
     # =====================================================
     # sp_get_query_details_by_user_session_id
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_query_details_by_user_session_id")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_get_query_details_by_user_session_id(
         IN p_created_by VARCHAR(100),
         IN p_session_id VARCHAR(100)
@@ -373,14 +385,16 @@ def create_stored_procedures(db_name):
     ORDER BY 
       q.created_at DESC;     
     END
-    """)
+    """
+    )
     #  COALESCE(q.parent_query_id, q.id),
     #   q.version_no DESC,
     # ============================================================
     # sp_get_report_list
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_report_list")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_get_report_list(
         IN p_session_id VARCHAR(100),
         IN p_user_id VARCHAR(100)
@@ -410,14 +424,15 @@ def create_stored_procedures(db_name):
 
         ORDER BY r.created_at DESC;
     END
-    """)
+    """
+    )
 
-    
     # ============================================================
     # sp_get_uploaded_files_status
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_uploaded_files_status")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_get_uploaded_files_status(
         IN p_created_by VARCHAR(100),
         IN p_session_id VARCHAR(100)
@@ -490,13 +505,15 @@ def create_stored_procedures(db_name):
 
 
     END
-    """)
+    """
+    )
 
     # ============================================================
     # sp_insert_uploaded_file
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_insert_uploaded_file")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_insert_uploaded_file(
             IN p_session_id VARCHAR(100),
             IN p_file_name VARCHAR(255),
@@ -601,13 +618,15 @@ def create_stored_procedures(db_name):
 
             SELECT LAST_INSERT_ID() AS file_id, 'NEW' AS status_flag;
     END
-    """)
+    """
+    )
 
     # ============================================================
     # sp_save_or_update_report
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_save_or_update_report")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_save_or_update_report(
            IN p_report_id VARCHAR(100),
         IN p_session_id VARCHAR(100),
@@ -660,17 +679,19 @@ def create_stored_procedures(db_name):
         END IF;
 
     END
-    """)
-#   -- CASE 2: Same query → EXISTS
-       
-#        ELSEIF v_existing_query = p_query_history_id
-#        AND v_existing_name = p_report_name THEN
-#        SET p_action = 'EXISTS';
+    """
+    )
+    #   -- CASE 2: Same query → EXISTS
+
+    #        ELSEIF v_existing_query = p_query_history_id
+    #        AND v_existing_name = p_report_name THEN
+    #        SET p_action = 'EXISTS';
     # ============================================================
     # sp_save_query
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_save_query")
-    c.execute("""
+    c.execute(
+        """
     CREATE PROCEDURE sp_save_query(
         IN p_session_id VARCHAR(100),
         IN p_created_by VARCHAR(100),
@@ -732,15 +753,15 @@ def create_stored_procedures(db_name):
 
         SELECT LAST_INSERT_ID() AS saved_id;
     END
-    """)
-
-
+    """
+    )
 
     # ============================================================
     # sp_refresh_query_row_counts
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_refresh_query_row_counts")
-    c.execute("""
+    c.execute(
+        """
         CREATE PROCEDURE sp_refresh_query_row_counts()
         BEGIN
             DECLARE done INT DEFAULT 0;
@@ -796,7 +817,9 @@ def create_stored_procedures(db_name):
             CLOSE cur;
             DROP TEMPORARY TABLE IF EXISTS tmp_cnt;
         END
-    """)
+    """
+    )
+
 
 # ==========================================================
 # SUPER ADMIN → COMPANY REGISTER CONTROLLER
@@ -816,7 +839,7 @@ def admin_company_register_controller():
         # if not company_name or  not company_email:
         #     return build_response(False, "Required fields missing", 400)
 
-# 🔹 FORM DATA
+        # 🔹 FORM DATA
         company_name = request.form.get("company_name")
         company_email = request.form.get("company_email")
         phone_number = request.form.get("phone_number")
@@ -826,6 +849,7 @@ def admin_company_register_controller():
         to_date = request.form.get("to_date")
 
         logo_file = request.files.get("company_logo")
+        created_by = request.form.get("created_by")
         print("FORM DATA =>", request.form)
 
         if not company_name or not company_email or not phone_number:
@@ -849,13 +873,47 @@ def admin_company_register_controller():
         company_db_name = f"sahaj_cmp_{company_code}"
         try:
             # insert company
+            # master_cursor.execute(
+            #     """
+            #     INSERT INTO companies
+            #     (company_name, company_code, company_email, phone_number, address,
+            #     subscription_type, from_date, to_date, company_db_name,created_by)
+            #     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            # """,
+            #     (
+            #         company_name,
+            #         company_code,
+            #         company_email,
+            #         phone_number,
+            #         address,
+            #         subscription_type,
+            #         from_date,
+            #         to_date,
+            #         company_db_name,
+            #         created_by
+            #     ),
+            # )
+            # master.commit()
             master_cursor.execute("""
                 INSERT INTO companies
-                (company_name, company_code, company_email, phone_number, address,
-                subscription_type, from_date, to_date, company_db_name)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (
+                    company_name,
+                    company_code,
+                    company_email,
+                    phone_number,
+                    address,
+                    subscription_type,
+                    from_date,
+                    to_date,
+                    company_db_name,
+                    created_by,
+                    is_active,
+                    is_deleted,
+                    created_at
+                )
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,NOW())
             """, (
-            company_name,
+                company_name,
                 company_code,
                 company_email,
                 phone_number,
@@ -863,24 +921,20 @@ def admin_company_register_controller():
                 subscription_type,
                 from_date,
                 to_date,
-                company_db_name
+                company_db_name,
+                created_by
             ))
             master.commit()
             company_id = master_cursor.lastrowid
         except mysql.connector.IntegrityError:
             master.rollback()
             return build_response(
-                False,
-                "Company already exists. Please retry with some other.",
-                409
-            )    
+                False, "Company already exists. Please retry with some other.", 409
+            )
         # 🔹 SAVE LOGO
         if logo_file:
             company_folder = os.path.join(
-                UPLOAD_FOLDER,
-                "companies",
-                company_db_name,
-                "logo"
+                UPLOAD_FOLDER, "companies", company_db_name, "logo"
             )
             os.makedirs(company_folder, exist_ok=True)
 
@@ -893,11 +947,14 @@ def admin_company_register_controller():
             # ✅ UI-FRIENDLY PATH (RELATIVE URL)
             logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
 
-            master_cursor.execute("""
+            master_cursor.execute(
+                """
                 UPDATE companies
                 SET company_logo=%s
                 WHERE id=%s
-            """, (logo_path, company_id))
+            """,
+                (logo_path, company_id),
+            )
 
             master.commit()
 
@@ -915,36 +972,41 @@ def admin_company_register_controller():
             host=MASTER_DB_HOST,
             user=MASTER_DB_USER,
             password=MASTER_DB_PASS,
-            database=company_db_name
+            database=company_db_name,
         )
         c = company_conn.cursor()
 
-               # ---------------- USER ROLES ----------------
-        c.execute(f"""
+        # ---------------- USER ROLES ----------------
+        c.execute(
+            f"""
 CREATE TABLE IF NOT EXISTS user_roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     role_name VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-""")
+"""
+        )
 
-# Default roles
-        c.execute("""
+        # Default roles
+        c.execute(
+            """
         INSERT IGNORE INTO user_roles (id, role_name)
         VALUES
         (1, 'companyadmin'),
         (2, 'user')
-""")
+"""
+        )
 
-    # Insert default Admin role
-    #     c.execute("""
-    # INSERT IGNORE INTO user_roles (id, role_name)
-    # VALUES (1, 'Admin')
-    # """)
+        # Insert default Admin role
+        #     c.execute("""
+        # INSERT IGNORE INTO user_roles (id, role_name)
+        # VALUES (1, 'Admin')
+        # """)
 
-    # ---------------- USERS ----------------
+        # ---------------- USERS ----------------
         # ---------------- USERS (COMPANY DB) ----------------
-        c.execute(f"""
+        c.execute(
+            f"""
         CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -964,10 +1026,12 @@ CREATE TABLE IF NOT EXISTS user_roles (
     updated_by VARCHAR(50),
     updated_at DATETIME DEFAULT NULL
 )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-""")
-    
-    # ---------------- UPLOADED FILES ----------------
-        c.execute(f"""
+"""
+        )
+
+        # ---------------- UPLOADED FILES ----------------
+        c.execute(
+            f"""
     CREATE TABLE IF NOT EXISTS uploaded_files (
         id INT AUTO_INCREMENT PRIMARY KEY,
         session_id VARCHAR(100),
@@ -995,10 +1059,12 @@ CREATE TABLE IF NOT EXISTS user_roles (
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-    """)
+    """
+        )
 
-    # ---------------- QUERY HISTORY ----------------
-        c.execute(f"""
+        # ---------------- QUERY HISTORY ----------------
+        c.execute(
+            f"""
     CREATE TABLE IF NOT EXISTS query_history (
            id INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -1027,10 +1093,12 @@ CREATE TABLE IF NOT EXISTS user_roles (
             updated_at TIMESTAMP NULL,
             updated_by VARCHAR(100) NULL
         )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-        """)
+        """
+        )
 
-    # ---------------- SAVED REPORTS ----------------
-        c.execute(f"""
+        # ---------------- SAVED REPORTS ----------------
+        c.execute(
+            f"""
     CREATE TABLE IF NOT EXISTS saved_reports (
         id INT AUTO_INCREMENT PRIMARY KEY,
         report_id VARCHAR(100),
@@ -1044,11 +1112,12 @@ CREATE TABLE IF NOT EXISTS user_roles (
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-    """)
-        
-        
-    # ---------------- upload progress----------------
-        c.execute(f"""     
+    """
+        )
+
+        # ---------------- upload progress----------------
+        c.execute(
+            f"""     
         CREATE TABLE upload_progress (
         id INT AUTO_INCREMENT PRIMARY KEY,
         session_id VARCHAR(100),
@@ -1060,7 +1129,8 @@ CREATE TABLE IF NOT EXISTS user_roles (
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_progress_hash (file_hash)
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
-    """)
+    """
+        )
         company_conn.commit()
         c.close()
         company_conn.close()
@@ -1072,7 +1142,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
             True,
             "Company registered successfully",
             200,
-            extra={"company_db": company_db_name}
+            extra={"company_db": company_db_name},
         )
 
     except Exception as e:

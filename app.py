@@ -24,6 +24,9 @@ from controller.admin_company_admin_register import (
 from middleware.dbContext import attach_company_db
 from controller.superadmin_login import superadmin_login_controller
 from controller.company_login import company_login_controller
+from controller.get_all_companies import get_all_companies_controller
+from controller.admin_company_delete import delete_company
+from controller.ai_chart_controller import modify_chart_controller
 
 # app = Flask(__name__,
 #     static_url_path="/uploads",
@@ -141,6 +144,18 @@ def serve_uploads(filename):
 def get_upload_progress_route():
     return upload_progress_ctrl()
 
+
+@app.route("/admin/get_companies", methods=["GET"])
+def get_all_companies_route():
+    return get_all_companies_controller()
+
+@app.route("/admin/company_delete", methods=["POST"])
+def company_delete_route():
+    return delete_company()
+
+@app.route("/modify_chart", methods=["POST"])
+def modify_chart_route():
+    return modify_chart_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
