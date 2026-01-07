@@ -4,7 +4,7 @@ from flask import jsonify,g
 from dotenv import load_dotenv
 import uuid
 import hashlib
-
+import base64
 # ---------- Load Environment Variables ----------
 load_dotenv()
 
@@ -78,7 +78,13 @@ def allowed_logo(filename):
     
 def make_file_hash(session_id, file_name):
     return hashlib.md5(f"{session_id}|{file_name}".encode()).hexdigest()
-    
+  
+  
+
+def save_base64_image(base64_str, path):
+    header, data = base64_str.split(",", 1)
+    with open(path, "wb") as f:
+        f.write(base64.b64decode(data))    
        
 
 

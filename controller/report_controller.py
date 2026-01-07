@@ -2,7 +2,16 @@
 import json
 from flask import request,g
 from database.dbConnection import get_db_connection
-from helper.helperFunctions import build_response  
+from helper.helperFunctions import build_response,save_base64_image
+import os 
+from dotenv import load_dotenv
+ 
+# ---------- Load Environment Variables ----------
+load_dotenv() 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+    
+ 
 
 def save_report_controller():
     try:
@@ -48,25 +57,6 @@ def save_report_controller():
 
         rows_effected = row["row_count"]
 
-        # # -------------------------------------------------
-        # # PREVENT DUPLICATE REPORT NAME (same user + session)
-        # # -------------------------------------------------
-        # cur.execute("""
-        #     SELECT 1
-        #     FROM saved_reports
-        #     WHERE report_name = %s
-        #     AND session_id = %s
-        #     AND user_id = %s
-        #     LIMIT 1
-        # """, (report_name, session_id, user_id))
-
-        # if cur.fetchone():
-        #     return build_response(
-        #         False,
-        #         "Report name already exists. Please use a different name.",
-        #         400
-        #     )
-
 
         # Call SP (save or update)
         args = [
@@ -84,10 +74,60 @@ def save_report_controller():
         # action = result[-1]   # INSERT / UPDATE / EXISTS
         cur.execute("SELECT @_sp_save_or_update_report_6 AS action")
         action = cur.fetchone()["action"]
+        chart_images = data.get("chart_images", [])
+
+        if chart_images:
+            report_folder = os.path.join(
+                UPLOAD_FOLDER,      # uploads
+                "reports",
+                report_id
+            )
+            os.makedirs(report_folder, exist_ok=True)
+
+            saved_images = []
+
+            for img in chart_images:
+                filename = f"{img['type']}_{img['order']}.png"
+                filepath = os.path.join(report_folder, filename)
+
+                save_base64_image(img["image_base64"], filepath)
+
+                saved_images.append({
+                    "chart_id": img["chart_id"],
+                    "type": img["type"],
+                    "order": img["order"],
+                    "path": f"/uploads/reports/{report_id}/{filename}"
+                })
+
+            # 🔥 existing report_config JSON নাও
+            report_config = (
+                report_config
+                if isinstance(report_config, dict)
+                else json.loads(report_config)
+            )
+
+            # 🔥 image info JSON এর ভিতরে ঢোকাও
+            report_config["chart_images"] = saved_images
+
+            # 🔥 DB update
+            cur.execute("""
+                UPDATE saved_reports
+                SET report_config=%s
+                WHERE report_id=%s
+                AND session_id=%s
+                AND user_id=%s
+            """, (
+                json.dumps(report_config),
+                report_id,
+                session_id,
+                user_id
+            ))
+
+          
 
         conn.commit()
         cur.close()
-        
+      
 
         if action == "EXISTS":
             return build_response(True, "Report already exists", 200)
@@ -137,12 +177,24 @@ def report_list_controller():
 
         result = []
         for r in rows:
+            report_config = (
+                    r["report_config"]
+                    if isinstance(r["report_config"], dict)
+                    else json.loads(r["report_config"])
+                )
+
+                # 🔥 add full url for chart images
+            if "chart_images" in report_config:
+                    base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
+                    for img in report_config["chart_images"]:
+                        img["url"] = f"{base_url}{img['path']}"   
+
             result.append({
                 # ===== SAME AS OLD =====
                 "report_id": r["report_id"],
                 "report_name": r["report_name"],
                 "row_affected": r["row_affected"],
-                "report_config":r["report_config"], 
+                "report_config": report_config,
                 "group_by": [],
                 "created_at": r["created_at"],
                 "actual_created_at": r["actual_created_at"],
