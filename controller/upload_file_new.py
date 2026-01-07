@@ -1413,6 +1413,7 @@ def get_upload_progress_controller():
             (row["processed_rows"] / row["total_rows"]) * 100, 2
         )
 
+
     return build_response(True, "Progress", 200, {
         **row,
         "percent": percent
