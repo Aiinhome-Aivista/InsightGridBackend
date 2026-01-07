@@ -55,5 +55,6 @@ def superadmin_login_controller():
         "role": "superadmin",
         "session_id": session_id,
         "full_name":user["full_name"],
+        "token": token
     })
 
