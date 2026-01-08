@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import uuid
 import hashlib
 import base64
+from datetime import date, datetime
+
 # ---------- Load Environment Variables ----------
 load_dotenv()
 
@@ -84,7 +86,23 @@ def make_file_hash(session_id, file_name):
 def save_base64_image(base64_str, path):
     header, data = base64_str.split(",", 1)
     with open(path, "wb") as f:
-        f.write(base64.b64decode(data))    
+        f.write(base64.b64decode(data))   
+        
+
+def format_dates_in_rows(rows):
+    for row in rows:
+        for key, value in row.items():
+
+            # ✅ DATETIME → "5 Jan 2026, 2:30 PM"
+            if isinstance(value, datetime):
+                row[key] = value.strftime("%-d %b %Y, %-I:%M %p")
+
+            # ✅ DATE → "05-01-2026"
+            elif isinstance(value, date):
+                row[key] = value.strftime("%d-%m-%Y")
+
+    return rows
+         
        
 
 
