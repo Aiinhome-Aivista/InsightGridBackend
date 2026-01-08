@@ -27,6 +27,7 @@ ALLOWED:
 - color / style update
 - changing xAxis or yAxis to another existing column from available_columns (view-only)
 - ADD a new chart (view-only, derived from existing data)
+- Chart title change and return updated chart title with customTitle key
 
 NEW CHART RULES:
 - New chart MUST use available_columns
