@@ -1,6 +1,6 @@
 from flask import request,g
 from database.dbConnection import get_db_connection
-from helper.helperFunctions import build_response
+from helper.helperFunctions import build_response, format_dates_in_rows
 
 def get_full_table_info_controller():
     try:
@@ -75,7 +75,11 @@ def get_full_table_info_controller():
 
             c2 = db.cursor(dictionary=True)
             c2.execute(f"SELECT * FROM `{tbl}`")
-            table_data_map[tbl] = c2.fetchall()
+            rows = c2.fetchall()          # 1️⃣ raw data
+            rows = format_dates_in_rows(rows)   # 2️⃣ DATE / DATETIME format
+
+            table_data_map[tbl] = rows 
+            # table_data_map[tbl] = c2.fetchall()
             c2.close()
 
         cursor.close()

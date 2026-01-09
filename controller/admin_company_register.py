@@ -811,12 +811,17 @@ def admin_company_register_controller():
         #     return build_response(False, "Required fields missing", 400)
 
         # 🔹 FORM DATA
+<<<<<<< HEAD
         if not hasattr(g, "user_id") or not hasattr(g, "role"):
             return build_response(False, "Unauthorized", 401)
 
         if g.role != "superadmin":
             return build_response(False, "Forbidden: Superadmin only", 403)
         
+=======
+        company_id = request.form.get("id")
+        company_id = int(company_id) if company_id else None
+>>>>>>> 890d4a3d1c7d0e13986f0fd6f27f333a542f5adb
         company_name = request.form.get("company_name")
         company_email = request.form.get("company_email")
         phone_number = request.form.get("phone_number")
@@ -831,6 +836,87 @@ def admin_company_register_controller():
 
         if not company_name or not company_email or not phone_number:
             return build_response(False, "Required fields missing", 400)
+        
+        
+        # ==================================================
+        # UPDATE COMPANY (ONLY IF company_id EXISTS)
+        # ==================================================
+        if company_id:
+            master = get_master_db()
+            master_cursor = master.cursor(dictionary=True)
+
+            master_cursor.execute("""
+                UPDATE companies
+                SET
+                    company_name=%s,
+                    company_email=%s,
+                    phone_number=%s,
+                    address=%s,
+                    subscription_type=%s,
+                    from_date=%s,
+                    to_date=%s,
+                    updated_at=NOW()
+                WHERE id=%s
+                AND is_deleted=0
+            """, (
+                company_name,
+                company_email,
+                phone_number,
+                address,
+                subscription_type,
+                from_date,
+                to_date,
+                company_id
+            ))
+
+            if master_cursor.rowcount == 0:
+                master.close()
+                return build_response(False, "Company not found", 404)
+
+            # 🔹 OPTIONAL LOGO UPDATE
+            if logo_file:
+                if not allowed_logo(logo_file.filename):
+                    return build_response(False, "Only PNG/JPEG allowed", 400)     
+                if len(logo_file.read()) > MAX_LOGO_SIZE:
+                    return build_response(False, "Logo must be < 2MB", 400)
+                logo_file.seek(0)  # VERY IMPORTANT
+                master_cursor.execute(
+                    "SELECT company_db_name FROM companies WHERE id=%s",
+                    (company_id,)
+                )
+                row = master_cursor.fetchone()
+                company_db_name = row["company_db_name"]
+
+                company_folder = os.path.join(
+                    UPLOAD_FOLDER, "companies", company_db_name, "logo"
+                )
+                os.makedirs(company_folder, exist_ok=True)
+
+                ext = secure_filename(logo_file.filename).rsplit(".", 1)[1].lower()
+                filename = f"logo.{ext}"
+
+                full_path = os.path.join(company_folder, filename)
+                logo_file.save(full_path)
+
+                logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
+
+                master_cursor.execute("""
+                    UPDATE companies
+                    SET company_logo=%s
+                    WHERE id=%s
+                """, (logo_path, company_id))
+
+            master.commit()
+            master.close()
+
+            return build_response(
+                True,
+                "Company updated successfully",
+                200
+            )
+
+        
+        
 
         # 🔒 LOGO VALIDATION
         logo_path = None
