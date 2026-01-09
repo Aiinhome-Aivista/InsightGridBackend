@@ -1,38 +1,40 @@
-from flask import request
+from flask import request,g
 from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response
 
 def get_full_table_info_controller():
     try:
-        body = request.get_json()
-        created_by = body.get("created_by")
-        session_id = body.get("session_id")
+        # body = request.get_json()
+        if not hasattr(g, "user_id") or not hasattr(g, "company_db"):
+            return build_response(False, "Unauthorized", 401)
+        created_by = g.user_id
+        # session_id = body.get("session_id")
 
-        if not created_by or not session_id:
-            return build_response(False, "created_by & session_id required", 400)
+        # if not created_by or not session_id:
+        #     return build_response(False, "created_by & session_id required", 400)
 
-        db = get_db_connection()
+        db = g.company_db  #get_db_connection()
         cursor = db.cursor(dictionary=True)
         #  VALIDATE SESSION ID & created_by
         # -----------------------------------
-        cursor.execute(
-            "SELECT user_id, session_id FROM users WHERE session_id = %s AND user_id = %s LIMIT 1",
-            (session_id, created_by)
-        )
-        session_row = cursor.fetchone()
+        # cursor.execute(
+        #     "SELECT user_id, session_id FROM users WHERE session_id = %s AND user_id = %s LIMIT 1",
+        #     ( created_by)
+        # )
+        # session_row = cursor.fetchone()
 
-        if not session_row:
-            cursor.close()
-            db.close()
-            return build_response(
-                False,
-                "Invalid session_id or created_by",
-                400
-                # {"status": "failed"}
-            )
+        # if not session_row:
+        #     cursor.close()
+        #     db.close()
+        #     return build_response(
+        #         False,
+        #         "Invalid session_id or created_by",
+        #         400
+        #         # {"status": "failed"}
+        #     )
 
         # CALL STORED PROCEDURE
-        cursor.callproc("sp_get_full_table_info", [created_by, session_id])
+        cursor.callproc("sp_get_full_table_info", [created_by])
         results = list(cursor.stored_results())
 
         # ----------------------
@@ -103,3 +105,4 @@ def get_full_table_info_controller():
 
     except Exception as e:
         return build_response(False, "Server Error", 500, {"error": str(e)})
+

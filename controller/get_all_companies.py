@@ -1,8 +1,15 @@
+from flask import g
 from database.dbConnection import get_master_db
 from helper.helperFunctions import build_response
 
 def get_all_companies_controller():
     try:
+        if not hasattr(g, "role"):
+            return build_response(False, "Unauthorized", 401)
+
+        if g.role != "superadmin":
+            return build_response(False, "Forbidden: Superadmin only", 403)
+        
         master = get_master_db()
         cursor = master.cursor(dictionary=True)
 

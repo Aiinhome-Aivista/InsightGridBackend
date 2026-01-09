@@ -1,9 +1,10 @@
-from flask import request
+from flask import request,g
 import bcrypt
 import uuid
 import os
 from database.dbConnection import get_master_db,get_company_db
 from helper.helperFunctions import build_response
+from helper.jwt_helper import generate_token
 
 
 # ==========================================================
@@ -21,10 +22,16 @@ def admin_company_admin_register_controller():
     company_conn = None
 
     try:
+        if not hasattr(g, "user_id") or not hasattr(g, "role"):
+            return build_response(False, "Unauthorized", 401)
+
+        if g.role != "superadmin":
+            return build_response(False, "Forbidden: Superadmin only", 403)
+        
         data = request.get_json() or {}
 
-        session_id = data.get("session_id")
-        created_by = data.get("created_by")      # SuperAdmin user_id
+        # session_id = data.get("session_id")
+        created_by = g.user_id       # SuperAdmin user_id
 
         company_code = data.get("company_code")
         admin_name = data.get("admin_name")
@@ -35,8 +42,8 @@ def admin_company_admin_register_controller():
         # BASIC VALIDATION
         # --------------------------------------------------
         if not all([
-            session_id,
-            created_by,
+            # session_id,
+            # created_by,
             company_code,
             admin_name,
             admin_email,
@@ -50,23 +57,23 @@ def admin_company_admin_register_controller():
         master = get_master_db()
         cursor = master.cursor(dictionary=True)
 
-        cursor.execute("""
-            SELECT u.user_id
-            FROM users u
-            JOIN app_roles ar ON ar.id = u.app_role_id
-            WHERE u.user_id = %s
-              AND u.session_id = %s
-              AND ar.role_name = 'superadmin'
-        """, (created_by, session_id))
+        # cursor.execute("""
+        #     SELECT u.user_id
+        #     FROM users u
+        #     JOIN app_roles ar ON ar.id = u.app_role_id
+        #     WHERE u.user_id = %s
+        #       AND u.session_id = %s
+        #       AND ar.role_name = 'superadmin'
+        # """, (created_by, session_id))
 
-        superadmin = cursor.fetchone()
+        # superadmin = cursor.fetchone()
 
-        if not superadmin:
-            return build_response(
-                False,
-                "Unauthorized: Only SuperAdmin can create Company Admin",
-                403
-            )
+        # if not superadmin:
+        #     return build_response(
+        #         False,
+        #         "Unauthorized: Only SuperAdmin can create Company Admin",
+        #         403
+        #     )
 
         # ==================================================
         # STEP 2: FETCH COMPANY INFO (MASTER DB)
@@ -162,7 +169,7 @@ def admin_company_admin_register_controller():
         # ==================================================
         # STEP 6.5: GENERATE SESSION ID FOR COMPANY ADMIN
         # ==================================================
-        admin_session_id = str(uuid.uuid4())
+        # admin_session_id = str(uuid.uuid4())
 
           
         # ==================================================
@@ -177,11 +184,10 @@ def admin_company_admin_register_controller():
                 password_hash,
                 app_role_id,
                 company_id,
-                session_id,
                 created_by,
                 created_at
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())
         """, (
             f"admin_{company_code}",
             admin_name,
@@ -189,7 +195,7 @@ def admin_company_admin_register_controller():
             hashed_password,
             company_admin_role_id,
             company_id,
-            admin_session_id,  
+            # admin_session_id,  
             created_by
         ))
 

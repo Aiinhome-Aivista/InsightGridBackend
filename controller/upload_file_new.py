@@ -729,13 +729,24 @@ def build_validation_message(row_errors):
 # -------------------------
 def upload_and_insights_new_controller():
     try:
-        if request.content_type and request.content_type.startswith("multipart"):
-            body = dict(request.form)
-            action = body.get("action")   # 🔥 ADD THIS
+        # if request.content_type and request.content_type.startswith("multipart"):
+        #     body = dict(request.form)
+        #     action = body.get("action")   # 🔥 ADD THIS
+        #     action = (action or "").strip().lower()
+        # else:
+        #     body = request.get_json(force=True)
+        #     action = body.get("action")
+        #     action = (action or "").strip().lower()
+        #     file_name = body.get("file_name")
+        if request.files:
+            body = request.form.to_dict()
+        elif request.form:
+            body = request.form.to_dict()
         else:
-            body = request.get_json(force=True)
-            action = body.get("action")
-            file_name = body.get("file_name")
+            body = request.get_json(silent=True) or {}
+
+        action = (body.get("action") or "").strip().lower()
+
 
        #  AUTH FROM JWT ONLY
         if not hasattr(g, "user_id") or not hasattr(g, "company_db"):

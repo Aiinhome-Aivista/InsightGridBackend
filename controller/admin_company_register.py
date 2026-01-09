@@ -1,6 +1,6 @@
 # controller/admin_company_register.py
 
-from flask import request
+from flask import request,g
 import mysql.connector
 import os
 from database.dbConnection import get_master_db
@@ -85,11 +85,10 @@ def create_stored_procedures(db_name):
     c.execute(
         """
     CREATE PROCEDURE sp_delete_uploaded_file(
-        IN p_session_id VARCHAR(100),
         IN p_created_by VARCHAR(100),
         IN p_file_name VARCHAR(255)
         )
-        proc_block:
+proc_block:
         BEGIN
             DECLARE v_table_name VARCHAR(255);
             DECLARE v_user_exists INT DEFAULT 0;
@@ -100,11 +99,10 @@ def create_stored_procedures(db_name):
             /* Validate session + user */
             SELECT COUNT(*) INTO v_user_exists
             FROM users
-            WHERE user_id = p_created_by
-            AND session_id = p_session_id;
+            WHERE user_id = p_created_by;
 
             IF v_user_exists = 0 THEN
-                SELECT 'Invalid session_id or created_by' AS status;
+                SELECT 'created_by' AS status;
                 LEAVE proc_block;
             END IF;
 
@@ -112,8 +110,8 @@ def create_stored_procedures(db_name):
             SELECT table_name
             INTO v_table_name
             FROM uploaded_files
-            WHERE session_id = p_session_id
-            AND created_by = p_created_by
+            WHERE 
+			created_by = p_created_by
             AND file_name = p_file_name
             LIMIT 1;
 
@@ -125,8 +123,8 @@ def create_stored_procedures(db_name):
             /* QUERY dependency check */
             SELECT COUNT(*) INTO v_query_dep
             FROM query_history
-            WHERE session_id = p_session_id
-            AND created_by = p_created_by
+            WHERE 
+            created_by = p_created_by
             AND table_names IS NOT NULL
             AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
             AND is_execute = 1;
@@ -146,8 +144,8 @@ def create_stored_procedures(db_name):
                     created_by,
                     created_at
                 FROM query_history
-                WHERE session_id = p_session_id
-                AND created_by = p_created_by
+                WHERE 
+                created_by = p_created_by
                 AND table_names IS NOT NULL
                 AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
                 AND is_execute = 1
@@ -161,8 +159,8 @@ def create_stored_procedures(db_name):
             FROM saved_reports sr
             JOIN query_history q
             ON q.id = sr.query_history_id
-            WHERE sr.session_id = p_session_id
-            AND sr.user_id = p_created_by
+            WHERE
+            sr.user_id = p_created_by
             AND q.table_names IS NOT NULL
             AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name));
 
@@ -182,8 +180,8 @@ def create_stored_procedures(db_name):
                 FROM saved_reports sr
                 JOIN query_history q
                 ON q.id = sr.query_history_id
-                WHERE sr.session_id = p_session_id
-                AND sr.user_id = p_created_by
+                WHERE 
+                sr.user_id = p_created_by
                 AND q.table_names IS NOT NULL
                 AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name))
                 ORDER BY sr.created_at DESC;
@@ -211,14 +209,15 @@ def create_stored_procedures(db_name):
             DEALLOCATE PREPARE stmt;
 
             DELETE FROM uploaded_files
-            WHERE session_id = p_session_id
-            AND created_by = p_created_by
+            WHERE 
+            created_by = p_created_by
             AND table_name = v_table_name;
 
             COMMIT;
 
             SELECT 'Table and all related metadata deleted successfully' AS status;
     END
+
     """
     )
 
@@ -227,18 +226,16 @@ def create_stored_procedures(db_name):
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_dashboard_data")
     c.execute(
-        """
+    """
     CREATE PROCEDURE sp_get_dashboard_data(
-        IN p_session_id VARCHAR(50),
         IN p_created_by VARCHAR(50)
     )
-    BEGIN
+BEGIN
             -- TOTAL FILE UPLOADS
         SELECT 
             COUNT(*) AS total_uploaded_files
         FROM uploaded_files
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND table_extraction_status = 'done'
         AND column_extraction_status = 'done'
         AND data_insights_status = 'done';
@@ -248,44 +245,38 @@ def create_stored_procedures(db_name):
             COUNT(*) AS table_extract_status
         FROM uploaded_files
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND table_extraction_status = 'done';
 
         -- TOTAL REPORTS GENERATED
     SELECT 
         COUNT(*) AS total_reports_generated
     FROM saved_reports
-    WHERE user_id = p_created_by
-    AND session_id = p_session_id;
+    WHERE user_id = p_created_by;
 
         -- TOTAL QUERIES GENERATED
         SELECT 
             COUNT(*) AS total_queries
         FROM query_history
-        WHERE created_by = p_created_by 
-        AND session_id = p_session_id;
+        WHERE created_by = p_created_by ;
 
         -- WORKING QUERIES (executed)
         SELECT 
             COUNT(*) AS working_queries
         FROM query_history
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND is_execute = 1;
 
         -- MOST RECENTLY UPLOADED FILE DETAILS
         SELECT *
         FROM uploaded_files
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND table_extraction_status = 'done'
         AND column_extraction_status = 'done'
         AND data_insights_status = 'done'
-        -- ORDER BY updated_at DESC
         ORDER BY  COALESCE(updated_at, created_at) DESC
         LIMIT 1;
     END
-    """
+"""
     )
 
     # =====================================================
@@ -293,18 +284,16 @@ def create_stored_procedures(db_name):
     # =====================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_full_table_info")
     c.execute(
-        """
+    """
     CREATE PROCEDURE sp_get_full_table_info(
-        IN p_created_by VARCHAR(100),
-        IN p_session_id VARCHAR(100)
+        IN p_created_by VARCHAR(100)
     )
-    BEGIN
+BEGIN
             SELECT DISTINCT
             table_name AS label,
             table_name AS value
         FROM uploaded_files
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND table_extraction_status = 'done'
         AND column_extraction_status = 'done'
         AND data_insights_status = 'done';
@@ -320,7 +309,6 @@ def create_stored_procedures(db_name):
             SELECT DISTINCT table_name
             FROM uploaded_files
             WHERE created_by = p_created_by
-            AND session_id = p_session_id
             AND table_extraction_status = 'done'
             AND column_extraction_status = 'done'
             AND data_insights_status = 'done'
@@ -337,12 +325,11 @@ def create_stored_procedures(db_name):
             insights
         FROM uploaded_files
         WHERE created_by = p_created_by
-        AND session_id = p_session_id
         AND table_extraction_status = 'done'
         AND column_extraction_status = 'done'
         AND data_insights_status = 'done';
     END
-    """
+"""
     )
 
     # =====================================================
@@ -351,11 +338,10 @@ def create_stored_procedures(db_name):
     c.execute("DROP PROCEDURE IF EXISTS sp_get_query_details_by_user_session_id")
     c.execute(
         """
-    CREATE PROCEDURE sp_get_query_details_by_user_session_id(
-        IN p_created_by VARCHAR(100),
-        IN p_session_id VARCHAR(100)
+        CREATE PROCEDURE sp_get_query_details_by_user_session_id(
+        IN p_created_by VARCHAR(100)
     )
-    BEGIN
+BEGIN
          SELECT 
         q.id,
         q.query_title,
@@ -375,17 +361,15 @@ def create_stored_procedures(db_name):
         DATE_FORMAT(q.created_at, '%d-%m-%Y') AS created_date,
         q.created_at AS actual_created_at,
          q.created_by,
-        q.session_id,
         q.updated_by,
         q.updated_at
      FROM query_history q
     WHERE q.created_by = p_created_by
-      AND q.session_id = p_session_id
       AND q.mode IN ('NEW','EDIT','CONTEXT')
     ORDER BY 
       q.created_at DESC;     
     END
-    """
+        """
     )
     #  COALESCE(q.parent_query_id, q.id),
     #   q.version_no DESC,
@@ -394,12 +378,11 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_report_list")
     c.execute(
-        """
-    CREATE PROCEDURE sp_get_report_list(
-        IN p_session_id VARCHAR(100),
+       """
+        CREATE PROCEDURE sp_get_report_list(
         IN p_user_id VARCHAR(100)
     )
-    BEGIN
+BEGIN
             SELECT
             r.report_id,
             r.report_name,
@@ -419,12 +402,12 @@ def create_stored_procedures(db_name):
         INNER JOIN query_history q 
             ON q.id = r.query_history_id
 
-        WHERE r.session_id = p_session_id
-        AND r.user_id = p_user_id
+        WHERE 
+        r.user_id = p_user_id
 
         ORDER BY r.created_at DESC;
     END
-    """
+"""
     )
 
     # ============================================================
@@ -432,12 +415,11 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_get_uploaded_files_status")
     c.execute(
-        """
-    CREATE PROCEDURE sp_get_uploaded_files_status(
-        IN p_created_by VARCHAR(100),
-        IN p_session_id VARCHAR(100)
+    """
+    CREATE  PROCEDURE sp_get_uploaded_files_status(
+        IN p_created_by VARCHAR(100)
     )
-    BEGIN
+BEGIN
         -- Normal Data
         SELECT 
             uf.id AS file_id,
@@ -459,8 +441,8 @@ def create_stored_procedures(db_name):
         (
             SELECT COUNT(*)
             FROM query_history qh
-            WHERE qh.session_id = uf.session_id
-              AND qh.created_by = uf.created_by
+            WHERE 
+              qh.created_by = uf.created_by
               AND JSON_CONTAINS(qh.table_names, JSON_QUOTE(uf.table_name))
         ) AS connected_queries,
 
@@ -469,8 +451,8 @@ def create_stored_procedures(db_name):
             SELECT COUNT(*)
             FROM saved_reports sr
             JOIN query_history qh ON qh.id = sr.query_history_id
-            WHERE qh.session_id = uf.session_id
-              AND qh.created_by = uf.created_by
+            WHERE 
+              qh.created_by = uf.created_by
               AND JSON_CONTAINS(qh.table_names, JSON_QUOTE(uf.table_name))
         ) AS connected_reports,
 
@@ -478,8 +460,8 @@ def create_stored_procedures(db_name):
         (
             SELECT JSON_ARRAYAGG(qh.query_title)
             FROM query_history qh
-            WHERE qh.session_id = uf.session_id
-              AND qh.created_by = uf.created_by
+            WHERE 
+              qh.created_by = uf.created_by
               AND JSON_CONTAINS(qh.table_names, JSON_QUOTE(uf.table_name))
         ) AS query_titles,
 
@@ -488,8 +470,8 @@ def create_stored_procedures(db_name):
             SELECT JSON_ARRAYAGG(sr.report_name)
             FROM saved_reports sr
             JOIN query_history qh ON qh.id = sr.query_history_id
-            WHERE qh.session_id = uf.session_id
-              AND qh.created_by = uf.created_by
+            WHERE 
+              qh.created_by = uf.created_by
               AND JSON_CONTAINS(qh.table_names, JSON_QUOTE(uf.table_name))
         ) AS report_names,
 
@@ -499,13 +481,11 @@ def create_stored_procedures(db_name):
 
         FROM uploaded_files uf
         WHERE uf.created_by = p_created_by
-          AND uf.session_id = p_session_id
-        -- ORDER BY uf.created_at DESC;
         ORDER BY  COALESCE(uf.updated_at, uf.created_at) DESC;
 
 
     END
-    """
+"""
     )
 
     # ============================================================
@@ -513,9 +493,8 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_insert_uploaded_file")
     c.execute(
-        """
+      """
     CREATE PROCEDURE sp_insert_uploaded_file(
-            IN p_session_id VARCHAR(100),
             IN p_file_name VARCHAR(255),
             IN p_table_name VARCHAR(255),
             IN p_file_size_mb VARCHAR(255),
@@ -532,7 +511,7 @@ def create_stored_procedures(db_name):
             IN p_data_insert_status VARCHAR(20),
             IN p_last_inserted_rows INT
         )
-        proc_main: BEGIN
+proc_main: BEGIN
 
             DECLARE v_pending_id INT DEFAULT NULL;
 
@@ -542,8 +521,8 @@ def create_stored_procedures(db_name):
             SELECT id
             INTO v_pending_id
             FROM uploaded_files
-            WHERE session_id = p_session_id
-            AND table_name = p_table_name
+            WHERE 
+            table_name = p_table_name
             AND data_insert_status = 'pending'
             ORDER BY created_at ASC
             LIMIT 1;
@@ -578,7 +557,6 @@ def create_stored_procedures(db_name):
             - OR re-insert history
             ------------------------------------------------ */
             INSERT INTO uploaded_files (
-                session_id,
                 file_name,
                 table_name,
                 file_size_mb,
@@ -597,7 +575,6 @@ def create_stored_procedures(db_name):
                 data_insert_status
             )
             VALUES (
-                p_session_id,
                 p_file_name,
                 p_table_name,
                 p_file_size_mb,
@@ -618,7 +595,7 @@ def create_stored_procedures(db_name):
 
             SELECT LAST_INSERT_ID() AS file_id, 'NEW' AS status_flag;
     END
-    """
+"""
     )
 
     # ============================================================
@@ -626,20 +603,19 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_save_or_update_report")
     c.execute(
-        """
+    """
     CREATE PROCEDURE sp_save_or_update_report(
            IN p_report_id VARCHAR(100),
-        IN p_session_id VARCHAR(100),
         IN p_user_id VARCHAR(100),
         IN p_report_name VARCHAR(255),
         IN p_query_history_id INT,
         IN p_row_affected INT,
         IN p_report_config JSON, 
-        OUT p_action VARCHAR(20)   -- INSERT / UPDATE / EXISTS
+        OUT p_action VARCHAR(20)  
     )
-    BEGIN
+BEGIN
         DECLARE v_existing_query INT;
-        DECLARE v_existing_name VARCHAR(255); -- new
+        DECLARE v_existing_name VARCHAR(255); 
 
         
         SELECT query_history_id, report_name
@@ -647,7 +623,6 @@ def create_stored_procedures(db_name):
 
         FROM saved_reports
         WHERE report_id = p_report_id
-        AND session_id = p_session_id
         AND user_id = p_user_id
         LIMIT 1;
 
@@ -655,9 +630,9 @@ def create_stored_procedures(db_name):
         IF v_existing_query IS NULL THEN
 
             INSERT INTO saved_reports
-            (report_id, session_id, user_id, report_name, query_history_id, row_affected,report_config)
+            (report_id, user_id, report_name, query_history_id, row_affected,report_config)
             VALUES
-            (p_report_id, p_session_id, p_user_id, p_report_name, p_query_history_id, p_row_affected, p_report_config);
+            (p_report_id, p_user_id, p_report_name, p_query_history_id, p_row_affected, p_report_config);
 
             SET p_action = 'INSERT';
 
@@ -672,14 +647,13 @@ def create_stored_procedures(db_name):
                  report_config = p_report_config, 
                 updated_at = NOW()
             WHERE report_id = p_report_id
-            AND session_id = p_session_id
             AND user_id = p_user_id;
 
             SET p_action = 'UPDATE';
         END IF;
 
     END
-    """
+"""
     )
     #   -- CASE 2: Same query → EXISTS
 
@@ -691,9 +665,8 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_save_query")
     c.execute(
-        """
+    """
     CREATE PROCEDURE sp_save_query(
-        IN p_session_id VARCHAR(100),
         IN p_created_by VARCHAR(100),
         IN p_query_title VARCHAR(150),
 
@@ -711,9 +684,8 @@ def create_stored_procedures(db_name):
         IN p_mode VARCHAR(20),
         IN p_parent_query_id INT
     )
-    BEGIN
+BEGIN
         INSERT INTO query_history (
-            session_id,
             created_by,
             query_title,
             message_query_id,
@@ -732,7 +704,6 @@ def create_stored_procedures(db_name):
             created_at
         )
         VALUES (
-            p_session_id,
             p_created_by,
             p_query_title,
             p_message_query_id,
@@ -753,7 +724,7 @@ def create_stored_procedures(db_name):
 
         SELECT LAST_INSERT_ID() AS saved_id;
     END
-    """
+"""
     )
 
     # ============================================================
@@ -761,9 +732,9 @@ def create_stored_procedures(db_name):
     # ============================================================
     c.execute("DROP PROCEDURE IF EXISTS sp_refresh_query_row_counts")
     c.execute(
-        """
-        CREATE PROCEDURE sp_refresh_query_row_counts()
-        BEGIN
+    """
+    CREATE PROCEDURE sp_refresh_query_row_counts()
+BEGIN
             DECLARE done INT DEFAULT 0;
             DECLARE v_query_id INT;
             DECLARE v_sql LONGTEXT;
@@ -817,7 +788,7 @@ def create_stored_procedures(db_name):
             CLOSE cur;
             DROP TEMPORARY TABLE IF EXISTS tmp_cnt;
         END
-    """
+"""
     )
 
 
@@ -840,6 +811,12 @@ def admin_company_register_controller():
         #     return build_response(False, "Required fields missing", 400)
 
         # 🔹 FORM DATA
+        if not hasattr(g, "user_id") or not hasattr(g, "role"):
+            return build_response(False, "Unauthorized", 401)
+
+        if g.role != "superadmin":
+            return build_response(False, "Forbidden: Superadmin only", 403)
+        
         company_name = request.form.get("company_name")
         company_email = request.form.get("company_email")
         phone_number = request.form.get("phone_number")
@@ -849,7 +826,7 @@ def admin_company_register_controller():
         to_date = request.form.get("to_date")
 
         logo_file = request.files.get("company_logo")
-        created_by = request.form.get("created_by")
+        created_by = g.user_id
         print("FORM DATA =>", request.form)
 
         if not company_name or not company_email or not phone_number:
@@ -895,35 +872,33 @@ def admin_company_register_controller():
             # )
             # master.commit()
             master_cursor.execute("""
-                INSERT INTO companies
-                (
-                    company_name,
-                    company_code,
-                    company_email,
-                    phone_number,
-                    address,
-                    subscription_type,
-                    from_date,
-                    to_date,
-                    company_db_name,
-                    created_by,
-                    is_active,
-                    is_deleted,
-                    created_at
-                )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,NOW())
-            """, (
-                company_name,
-                company_code,
-                company_email,
-                phone_number,
-                address,
-                subscription_type,
-                from_date,
-                to_date,
-                company_db_name,
-                created_by
-            ))
+    INSERT INTO companies
+    (
+        company_name,
+        company_code,
+        company_email,
+        phone_number,
+        address,
+        subscription_type,
+        from_date,
+        to_date,
+        company_db_name,
+        is_active,
+        created_at
+    )
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1,NOW())
+""", (
+    company_name,
+    company_code,
+    company_email,
+    phone_number,
+    address,
+    subscription_type,
+    from_date,
+    to_date,
+    company_db_name
+))
+
             master.commit()
             company_id = master_cursor.lastrowid
         except mysql.connector.IntegrityError:
@@ -1018,7 +993,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     app_role_id INT NOT NULL,
     company_id INT NOT NULL,
 
-    session_id VARCHAR(36),
+   
 
     created_by VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1034,7 +1009,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
             f"""
     CREATE TABLE IF NOT EXISTS uploaded_files (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        session_id VARCHAR(100),
+       
         file_name VARCHAR(255),
         table_name VARCHAR(255),
         file_size_mb varchar(100),
@@ -1068,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     CREATE TABLE IF NOT EXISTS query_history (
            id INT AUTO_INCREMENT PRIMARY KEY,
 
-            session_id VARCHAR(100) NOT NULL,
+            
             created_by VARCHAR(100) NOT NULL,
 
             query_title VARCHAR(150),
@@ -1107,7 +1082,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
         row_affected INT,
         report_config JSON,
         user_id VARCHAR(100),
-        session_id VARCHAR(100),
+       
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL
@@ -1120,7 +1095,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
             f"""     
         CREATE TABLE upload_progress (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        session_id VARCHAR(100),
+       
         file_name VARCHAR(255),
         file_hash CHAR(32),
         processed_rows BIGINT DEFAULT 0,

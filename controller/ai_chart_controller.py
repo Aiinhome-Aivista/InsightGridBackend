@@ -1,4 +1,4 @@
-from flask import request
+from flask import request,g
 from helper.helperFunctions import build_response
 from model.llm_client import call_llm
 import json

@@ -17,13 +17,13 @@ def save_report_controller():
     try:
         data = request.get_json()
 
-        session_id = data.get("session_id")
-        user_id = data.get("created_by")
+        # session_id = data.get("session_id")
+        user_id = g.user_id
         report_id = data.get("report_id")
         report_name = data.get("report_name")
         query_history_id = data.get("query_history_id")
         report_config = data.get("report_config")
-        if not all([session_id, user_id, report_id, report_name, query_history_id,report_config]):
+        if not all([user_id, report_id, report_name, query_history_id,report_config]):
             return build_response(False, "Missing required fields", 400)
      
         # -----------------------------
@@ -37,12 +37,12 @@ def save_report_controller():
         # cur = conn.cursor()
         cur = conn.cursor(dictionary=True)
         # Validate session + user
-        cur.execute("""
-            SELECT 1 FROM users
-            WHERE session_id=%s AND user_id=%s
-        """, (session_id, user_id))
-        if not cur.fetchone():
-            return build_response(False, "Invalid session or user", 401)
+        # cur.execute("""
+        #     SELECT 1 FROM users
+        #     WHERE session_id=%s AND user_id=%s
+        # """, (session_id, user_id))
+        # if not cur.fetchone():
+        #     return build_response(False, "Invalid session or user", 401)
 
         # Fetch row_affected
         # cur.execute("""
@@ -61,7 +61,7 @@ def save_report_controller():
         # Call SP (save or update)
         args = [
             report_id,
-            session_id,
+            # session_id,
             user_id,
             report_name,
             query_history_id,
@@ -114,12 +114,11 @@ def save_report_controller():
                 UPDATE saved_reports
                 SET report_config=%s
                 WHERE report_id=%s
-                AND session_id=%s
                 AND user_id=%s
             """, (
                 json.dumps(report_config),
                 report_id,
-                session_id,
+                # session_id,
                 user_id
             ))
 
@@ -143,12 +142,14 @@ def save_report_controller():
 
 def report_list_controller():
     try:
+        if not hasattr(g, "user_id") or not hasattr(g, "company_db"):
+            return build_response(False, "Unauthorized", 401)
         data = request.get_json() or {}
-        session_id = data.get("session_id")
-        user_id = data.get("created_by")
+        # session_id = data.get("session_id")
+        user_id = g.user_id
 
-        if not session_id or not user_id:
-            return build_response(False, "session_id & user_id required", 400)
+        # if not session_id or not user_id:
+        #     return build_response(False, "session_id & user_id required", 400)
         
         # -----------------------------
         # COMPANY DB MUST ALREADY EXIST
@@ -161,21 +162,22 @@ def report_list_controller():
         cur = conn.cursor(dictionary=True)
 
         # Validate session + user
-        cur.execute("""
-            SELECT 1 FROM users
-            WHERE session_id=%s AND user_id=%s
-        """, (session_id, user_id))
-        if not cur.fetchone():
-            return build_response(False, "Invalid session or user", 401)
+        # cur.execute("""
+        #     SELECT 1 FROM users
+        #     WHERE session_id=%s AND user_id=%s
+        # """, (session_id, user_id))
+        # if not cur.fetchone():
+        #     return build_response(False, "Invalid session or user", 401)
 
         #  V2 SP call
-        cur.callproc("sp_get_report_list", [session_id, user_id])
+        cur.callproc("sp_get_report_list", [ user_id])
 
         rows = []
         for res in cur.stored_results():
             rows = res.fetchall()
 
         result = []
+       
         for r in rows:
             report_config = (
                     r["report_config"]

@@ -21,6 +21,7 @@ from controller.admin_company_register import admin_company_register_controller
 from controller.admin_company_admin_register import (
     admin_company_admin_register_controller,
 )
+from helper.jwt_middleware import jwt_protect
 from middleware.dbContext import attach_company_db
 from controller.superadmin_login import superadmin_login_controller
 from controller.company_login import company_login_controller
@@ -40,6 +41,9 @@ CORS(app)
 
 @app.before_request
 def before_request():
+    # 🔥 allow CORS preflight
+    if request.method == "OPTIONS":
+        return None
     return attach_company_db()
 
 
@@ -127,11 +131,17 @@ def report_list_route():
 
 @app.route("/admin/company_register", methods=["POST"])
 def admin_company_register_route():
+    auth_error = jwt_protect()   # 🔥 MUST
+    if auth_error:
+        return auth_error
     return admin_company_register_controller()
 
 
 @app.route("/admin/company/admin_register", methods=["POST"])
 def admin_company_admin_register_route():
+    auth_error = jwt_protect()   # 🔥 MUST
+    if auth_error:
+        return auth_error
     return admin_company_admin_register_controller()
 
 
@@ -147,10 +157,16 @@ def get_upload_progress_route():
 
 @app.route("/admin/get_companies", methods=["GET"])
 def get_all_companies_route():
+    auth_error = jwt_protect()   # 🔥 MUST
+    if auth_error:
+        return auth_error
     return get_all_companies_controller()
 
 @app.route("/admin/company_delete", methods=["POST"])
 def company_delete_route():
+    auth_error = jwt_protect()   # 🔥 MUST
+    if auth_error:
+        return auth_error
     return delete_company()
 
 @app.route("/modify_chart", methods=["POST"])

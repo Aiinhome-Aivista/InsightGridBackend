@@ -164,10 +164,12 @@ def is_new_message(query_id):
 
 def query_save_controller():
     try:
+        if not hasattr(g, "user_id") or not hasattr(g, "company_db"):
+            return build_response(False, "Unauthorized", 401)
         data = request.get_json()
 
-        session_id = data.get("session_id")
-        created_by = data.get("created_by")
+        # session_id = data.get("session_id")
+        created_by = g.user_id
         query_title = data.get("query_title")
         parent_query_id = data.get("parent_query_id")  # DB id (edit case)
         messages = data.get("messages", [])
@@ -196,7 +198,7 @@ def query_save_controller():
             # FIRST SAVE → ROOT
             if root_parent_id is None and idx == 0:
                 cursor.callproc("sp_save_query", [
-                    session_id,
+                    # session_id,
                     created_by,
                     query_title,
                     query_id,
@@ -218,7 +220,7 @@ def query_save_controller():
 
             else:
                 cursor.callproc("sp_save_query", [
-                    session_id,
+                    # session_id,
                     created_by,
                     query_title,
                     query_id,

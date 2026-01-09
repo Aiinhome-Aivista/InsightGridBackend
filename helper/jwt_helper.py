@@ -4,7 +4,7 @@ import os
 
 JWT_SECRET = os.getenv("JWT_SECRET_KEY")
 JWT_ALGO = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_EXP_MIN = int(os.getenv("JWT_EXPIRE_MINUTES", 15))
+JWT_EXP_MIN = int(os.getenv("JWT_EXPIRE_MINUTES", 50))
 
 
 # =========================

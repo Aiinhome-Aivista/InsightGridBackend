@@ -133,22 +133,24 @@ def ask_llm_for_sp_name(user_query):
 def chat_endpoint_controller():
     try:
         data = request.get_json() or {}
-        session_id = data.get("session_id")
+        # session_id = data.get("session_id")
         # created_by = data.get("created_by")
         user_query = data.get("user_query")
 
-        if not all([session_id,  user_query]):
-            return build_response(False, "Missing required fields", 400)
-        
+        # if not all([session_id,  user_query]):
+        #     return build_response(False, "Missing required fields", 400)
+        if not user_query:
+            return build_response(False, "user_query required", 400)
         # -----------------------------
         # COMPANY DB MUST ALREADY EXIST
         # (set by attach_company_db)
         # -----------------------------
         # company db attach হয়েছে কিনা
-        if not hasattr(g, "company_db") or not hasattr(g, "created_by"):
-            return build_response(False, "Invalid session", 401)
-
-        created_by = g.created_by   # 🔥 THIS IS IMPORTANT
+        # if not hasattr(g, "company_db") or not hasattr(g, "created_by"):
+        #     return build_response(False, "Invalid session", 401)
+        if not hasattr(g, "user_id") or not hasattr(g, "company_db"):
+            return build_response(False, "Unauthorized", 401)
+        created_by = g.user_id #g.created_by   # 🔥 THIS IS IMPORTANT
         # ======================================================
         # STEP 1 — Fetch table names from uploaded_files
         # ======================================================
@@ -158,11 +160,10 @@ def chat_endpoint_controller():
         cursor.execute("""
             SELECT table_name 
             FROM uploaded_files  
-            WHERE session_id=%s
-              AND created_by=%s
+            WHERE created_by=%s
               AND table_extraction_status='done'
               AND column_extraction_status='done'
-        """, (session_id, created_by))
+        """, (created_by,))
 
         table_rows = cursor.fetchall()
 
@@ -283,7 +284,7 @@ ABSOLUTE SECURITY RULES:
         # STEP 5 — Response
         # ======================================================
         return build_response(True, "Chat processed", 200, {
-            "session_id": session_id,
+            # "session_id": session_id,
             "tables": table_names,
             "schema_context": schema_context,
             "ai_response": ai_sql

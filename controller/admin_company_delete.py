@@ -1,14 +1,20 @@
-from flask import request
+from flask import request,g
 from database.dbConnection import get_master_db
 from helper.helperFunctions import build_response
 
 
 def delete_company():
     try:
-        data = request.get_json()
+        if not hasattr(g, "user_id") or not hasattr(g, "role"):
+            return build_response(False, "Unauthorized", 401)
+
+        if g.role != "superadmin":
+            return build_response(False, "Forbidden: Superadmin only", 403)
+        
+        data = request.get_json() or {}
 
         company_id = data.get("company_id")
-        deleted_by = data.get("deleted_by")
+        deleted_by = g.user_id 
 
         if not company_id or not deleted_by:
             return build_response(

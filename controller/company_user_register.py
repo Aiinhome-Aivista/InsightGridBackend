@@ -1,22 +1,28 @@
 # controller/company_user_register.py
-from flask import request
+from flask import request,g
 import uuid, bcrypt
 from database.dbConnection import get_master_db, get_company_db
 from helper.helperFunctions import build_response, generate_user_id
 
 def company_user_register_controller():
     try:
+        if not hasattr(g, "role") or not hasattr(g, "company_db_name"):
+            return build_response(False, "Unauthorized", 401)
+
+        if g.role != "companyadmin":
+            return build_response(False, "Forbidden: CompanyAdmin only", 403)
+        
         data = request.get_json() or {}
 
-        session_id = data.get("session_id")
-        created_by = data.get("created_by")
+        # session_id = data.get("session_id")
+        created_by = g.user_id
         company_code = data.get("company_code")
 
         name = data.get("user_name")
         email = data.get("user_email")
         password = data.get("password")
 
-        if not all([session_id, created_by, company_code, name, email, password]):
+        if not all([created_by, company_code, name, email, password]):
             return build_response(False, "Required fields missing", 400)
 
         # =================================================
@@ -47,14 +53,14 @@ def company_user_register_controller():
         company_db = get_company_db(company_db_name)
         ccur = company_db.cursor(dictionary=True)
 
-        ccur.execute("""
-            SELECT user_id
-            FROM users
-            WHERE user_id=%s AND session_id=%s
-        """, (created_by, session_id))
+        # ccur.execute("""
+        #     SELECT user_id
+        #     FROM users
+        #     WHERE user_id=%s AND session_id=%s
+        # """, (created_by, session_id))
 
-        if not ccur.fetchone():
-            return build_response(False, "Invalid session or user", 403)
+        # if not ccur.fetchone():
+        #     return build_response(False, "Invalid session or user", 403)
 
         # =================================================
         # STEP 3: GET ROLE ID (user)
@@ -89,10 +95,10 @@ def company_user_register_controller():
         ccur.execute("""
             INSERT INTO users (
                 user_id, full_name, email, password_hash,
-                app_role_id, company_id, session_id,
+                app_role_id, company_id,
                 created_by, created_at
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())
         """, (
             user_id,
             name,
@@ -100,7 +106,6 @@ def company_user_register_controller():
             password_hash,
             role_id,
             company_id,
-            user_session_id,
             created_by
         ))
 

@@ -146,22 +146,24 @@ from helper.helperFunctions import build_response
 
 def get_saved_query_response_controller():
     try:
+        if not hasattr(g, "user_id") or not hasattr(g, "company_db"):
+            return build_response(False, "Unauthorized", 401)
         body = request.get_json()
-        created_by = body.get("created_by")
-        session_id = body.get("session_id")
+        created_by = g.user_id
+        # session_id = body.get("session_id")
 
-        if not created_by or not session_id:
-            return build_response(False, "created_by & session_id required", 400)
+        # if not created_by or not session_id:
+        #     return build_response(False, "created_by & session_id required", 400)
 
-        if not hasattr(g, "company_db"):
-            return build_response(False, "Invalid session", 401)
+        # if not hasattr(g, "company_db"):
+        #     return build_response(False, "Invalid session", 401)
 
         db = g.company_db
         cursor = db.cursor(dictionary=True)
 
         cursor.callproc(
             "sp_get_query_details_by_user_session_id",
-            (created_by, session_id)
+            (created_by,)
         )
 
         rows = []
@@ -186,7 +188,7 @@ def get_saved_query_response_controller():
                 query_map[root_id] = {
                     "id": root_id,                    # 👈 THIS IS USED FOR EDIT
                     "query_title": r["query_title"],
-                    "session_id": r["session_id"],
+                    # "session_id": r["session_id"],
                     "created_by": r["created_by"],
                     "created_at": r["created_at"],
                     "created_date": r["created_date"],
