@@ -39,6 +39,7 @@ UPLOAD_ROOT = os.path.join(BASE_DIR, "uploads")
 CORS(app)
 
 
+
 @app.before_request
 def before_request():
     # 🔥 allow CORS preflight
