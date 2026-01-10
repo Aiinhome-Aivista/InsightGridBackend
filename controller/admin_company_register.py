@@ -782,19 +782,6 @@ BEGIN
 # ==========================================================
 def admin_company_register_controller():
     try:
-        # data = request.get_json()
-
-        # company_name = data.get("company_name")
-        # # company_code = data.get("company_code")
-        # company_email = data.get("company_email")
-        # address = data.get("address")
-        # subscription_type = data.get("subscription_type")
-        # from_date = data.get("from_date")
-        # to_date = data.get("to_date")
-
-        # if not company_name or  not company_email:
-        #     return build_response(False, "Required fields missing", 400)
-
         # 🔹 FORM DATA
         company_id = request.form.get("id")
         company_id = int(company_id) if company_id else None
@@ -911,28 +898,6 @@ def admin_company_register_controller():
         company_code = generate_company_code(company_name, master_cursor)
         company_db_name = f"sahaj_cmp_{company_code}"
         try:
-            # insert company
-            # master_cursor.execute(
-            #     """
-            #     INSERT INTO companies
-            #     (company_name, company_code, company_email, phone_number, address,
-            #     subscription_type, from_date, to_date, company_db_name,created_by)
-            #     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            # """,
-            #     (
-            #         company_name,
-            #         company_code,
-            #         company_email,
-            #         phone_number,
-            #         address,
-            #         subscription_type,
-            #         from_date,
-            #         to_date,
-            #         company_db_name,
-            #         created_by
-            #     ),
-            # )
-            # master.commit()
             master_cursor.execute("""
     INSERT INTO companies
     (
@@ -1033,13 +998,6 @@ CREATE TABLE IF NOT EXISTS user_roles (
         (2, 'user')
 """
         )
-
-        # Insert default Admin role
-        #     c.execute("""
-        # INSERT IGNORE INTO user_roles (id, role_name)
-        # VALUES (1, 'Admin')
-        # """)
-
         # ---------------- USERS ----------------
         # ---------------- USERS (COMPANY DB) ----------------
         c.execute(

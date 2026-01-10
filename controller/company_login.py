@@ -121,12 +121,6 @@ def company_login_controller():
     master.commit()
     mcur.close()
 
-    # return build_response(True, "Login successful", 200, {
-    #     "user_id": user["user_id"],
-    #     "role": user["role_name"],
-    #     "company_code": company_code,
-    #     "session_id": session_id
-    # })
     # ---- build full logo url for PDF ----
     base_url = request.host_url.rstrip("/")  # http://127.0.0.1:3008
     logo_path = company["company_logo"]  # /uploads/companies/...
