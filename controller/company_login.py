@@ -96,7 +96,7 @@ def company_login_controller():
     # =========================
     # JWT TOKEN GENERATION
     # =========================
-    token = generate_token(
+    token, token_expiry = generate_token(
         {
             "user_id": user["user_id"],
             "role": user["role_name"],
@@ -149,6 +149,7 @@ def company_login_controller():
             "subscription_type": company["subscription_type"],
             "subscription_from": str(company["from_date"]),
             "subscription_to": str(company["to_date"]),
-            "token": token
+            "token": token,
+            "token_expiry": token_expiry
         }
     )

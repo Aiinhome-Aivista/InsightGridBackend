@@ -44,7 +44,7 @@ def superadmin_login_controller():
     #     "session_id": session_id
     # })
     
-    token = generate_token({
+    token, token_expiry  = generate_token({
     "user_id": user["user_id"],
     "role": "superadmin",
     "scope": "master"
@@ -55,6 +55,8 @@ def superadmin_login_controller():
         "role": "superadmin",
         "session_id": session_id,
         "full_name":user["full_name"],
-        "token": token
+        "token": token,
+        "token_expiry": token_expiry
+
     })
 
