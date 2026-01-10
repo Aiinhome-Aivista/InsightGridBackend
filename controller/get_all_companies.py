@@ -1,4 +1,4 @@
-from flask import g
+from flask import g,request
 from database.dbConnection import get_master_db
 from helper.helperFunctions import build_response
 
@@ -18,9 +18,19 @@ def get_all_companies_controller():
         data = []
         for result in cursor.stored_results():
             data = result.fetchall()
+            
 
         cursor.close()
         master.close()
+
+        # 🌐 build logo URLs for ALL companies
+        base_url = request.host_url.rstrip("/")  # http://127.0.0.1:3008
+
+        for row in data:
+            logo_path = row.get("company_logo")
+            row["company_logo_url"] = (
+                f"{base_url}{logo_path}" if logo_path else None
+            )
 
         # ✅ DIRECT DATA RETURN (NO EXTRA OBJECT)
         return build_response(

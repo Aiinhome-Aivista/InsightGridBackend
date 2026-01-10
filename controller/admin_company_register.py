@@ -89,134 +89,119 @@ def create_stored_procedures(db_name):
         IN p_file_name VARCHAR(255)
         )
 proc_block:
-        BEGIN
-            DECLARE v_table_name VARCHAR(255);
-            DECLARE v_user_exists INT DEFAULT 0;
-            DECLARE v_table_exists INT DEFAULT 0;
-            DECLARE v_query_dep INT DEFAULT 0;
-            DECLARE v_report_dep INT DEFAULT 0;
+BEGIN
+    DECLARE v_table_name VARCHAR(255);
+    DECLARE v_user_exists INT DEFAULT 0;
+    DECLARE v_table_exists INT DEFAULT 0;
+    DECLARE v_query_dep INT DEFAULT 0;
+    DECLARE v_report_dep INT DEFAULT 0;
 
-            /* Validate session + user */
-            SELECT COUNT(*) INTO v_user_exists
-            FROM users
-            WHERE user_id = p_created_by;
+    SELECT COUNT(*) INTO v_user_exists
+    FROM users
+    WHERE user_id = p_created_by;
 
-            IF v_user_exists = 0 THEN
-                SELECT 'created_by' AS status;
-                LEAVE proc_block;
-            END IF;
+    IF v_user_exists = 0 THEN
+        SELECT 'created_by' AS status;
+        LEAVE proc_block;
+    END IF;
 
-            /*Resolve table_name */
-            SELECT table_name
-            INTO v_table_name
-            FROM uploaded_files
-            WHERE 
-			created_by = p_created_by
-            AND file_name = p_file_name
-            LIMIT 1;
+    SELECT table_name
+    INTO v_table_name
+    FROM uploaded_files
+    WHERE created_by = p_created_by
+      AND file_name = p_file_name
+    LIMIT 1;
 
-            IF v_table_name IS NULL THEN
-                SELECT 'No file metadata found' AS status;
-                LEAVE proc_block;
-            END IF;
+    IF v_table_name IS NULL THEN
+        SELECT 'No file metadata found' AS status;
+        LEAVE proc_block;
+    END IF;
 
-            /* QUERY dependency check */
-            SELECT COUNT(*) INTO v_query_dep
-            FROM query_history
-            WHERE 
-            created_by = p_created_by
-            AND table_names IS NOT NULL
-            AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
-            AND is_execute = 1;
+    SELECT COUNT(*) INTO v_report_dep
+    FROM saved_reports sr
+    JOIN query_history q
+        ON q.id = sr.query_history_id
+    WHERE sr.user_id = p_created_by
+      AND q.table_names IS NOT NULL
+      AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name));
 
-            IF v_query_dep > 0 THEN
-                -- Result set 1: status
-                SELECT CONCAT(
-                    'Table "', v_table_name,
-                    '" is already used in ', v_query_dep,
-                    ' queries'
-                ) AS status;
+    IF v_report_dep > 0 THEN
+        SELECT CONCAT(
+            'Table "', v_table_name,
+            '" is already used in ', v_report_dep,
+            ' reports'
+        ) AS status;
 
-                -- Result set 2: query dependency list
-                SELECT
-                    id,
-                    query_title,
-                    created_by,
-                    created_at
-                FROM query_history
-                WHERE 
-                created_by = p_created_by
-                AND table_names IS NOT NULL
-                AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
-                AND is_execute = 1
-                ORDER BY created_at DESC;
-
-                LEAVE proc_block;
-            END IF;
-
-            /* REPORT dependency check */
-            SELECT COUNT(*) INTO v_report_dep
-            FROM saved_reports sr
-            JOIN query_history q
+        SELECT
+            sr.report_id,
+            sr.report_name,
+            sr.created_at
+        FROM saved_reports sr
+        JOIN query_history q
             ON q.id = sr.query_history_id
-            WHERE
-            sr.user_id = p_created_by
-            AND q.table_names IS NOT NULL
-            AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name));
+        WHERE sr.user_id = p_created_by
+          AND q.table_names IS NOT NULL
+          AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name))
+        ORDER BY sr.created_at DESC;
+    END IF;
 
-            IF v_report_dep > 0 THEN
-                -- Result set 1: status
-                SELECT CONCAT(
-                    'Table "', v_table_name,
-                    '" is already used in ', v_report_dep,
-                    ' reports'
-                ) AS status;
+    SELECT COUNT(*) INTO v_query_dep
+    FROM query_history
+    WHERE created_by = p_created_by
+      AND table_names IS NOT NULL
+      AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
+      AND is_execute = 1;
 
-                -- Result set 2: report dependency list
-                SELECT
-                    sr.report_id,
-                    sr.report_name,
-                    sr.created_at
-                FROM saved_reports sr
-                JOIN query_history q
-                ON q.id = sr.query_history_id
-                WHERE 
-                sr.user_id = p_created_by
-                AND q.table_names IS NOT NULL
-                AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name))
-                ORDER BY sr.created_at DESC;
+    IF v_query_dep > 0 THEN
+        SELECT CONCAT(
+            'Table "', v_table_name,
+            '" is already used in ', v_query_dep,
+            ' queries'
+        ) AS status;
 
-                LEAVE proc_block;
-            END IF;
+        SELECT
+            id,
+            query_title,
+            created_by,
+            created_at
+        FROM query_history
+        WHERE created_by = p_created_by
+          AND table_names IS NOT NULL
+          AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
+          AND is_execute = 1
+        ORDER BY created_at DESC;
+    END IF;
 
-            /*Table MUST exist */
-            SELECT COUNT(*) INTO v_table_exists
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = v_table_name;
+    IF v_report_dep > 0 OR v_query_dep > 0 THEN
+        LEAVE proc_block;
+    END IF;
 
-            IF v_table_exists = 0 THEN
-                SELECT 'Table does not exist - delete operation aborted' AS status;
-                LEAVE proc_block;
-            END IF;
+    SELECT COUNT(*) INTO v_table_exists
+    FROM information_schema.tables
+    WHERE table_schema = DATABASE()
+      AND table_name = v_table_name;
 
-            /* Safe delete */
-            START TRANSACTION;
+    IF v_table_exists = 0 THEN
+        SELECT 'Table does not exist - delete operation aborted' AS status;
+        LEAVE proc_block;
+    END IF;
+    
+    START TRANSACTION;
 
-            SET @drop_sql = CONCAT('DROP TABLE `', v_table_name, '`');
-            PREPARE stmt FROM @drop_sql;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
+    SET @drop_sql = CONCAT('DROP TABLE `', v_table_name, '`');
+    PREPARE stmt FROM @drop_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
 
-            DELETE FROM uploaded_files
-            WHERE 
-            created_by = p_created_by
-            AND table_name = v_table_name;
+    DELETE FROM uploaded_files
+    WHERE created_by = p_created_by
+      AND table_name = v_table_name;
+	DELETE FROM upload_progress
+    WHERE file_name = p_file_name;
+    COMMIT;
 
-            COMMIT;
-
-            SELECT 'Table and all related metadata deleted successfully' AS status;
-    END
+    SELECT 'Table and all related metadata deleted successfully' AS status;
+END
 
     """
     )
@@ -811,17 +796,8 @@ def admin_company_register_controller():
         #     return build_response(False, "Required fields missing", 400)
 
         # 🔹 FORM DATA
-<<<<<<< HEAD
-        if not hasattr(g, "user_id") or not hasattr(g, "role"):
-            return build_response(False, "Unauthorized", 401)
-
-        if g.role != "superadmin":
-            return build_response(False, "Forbidden: Superadmin only", 403)
-        
-=======
         company_id = request.form.get("id")
         company_id = int(company_id) if company_id else None
->>>>>>> 890d4a3d1c7d0e13986f0fd6f27f333a542f5adb
         company_name = request.form.get("company_name")
         company_email = request.form.get("company_email")
         phone_number = request.form.get("phone_number")

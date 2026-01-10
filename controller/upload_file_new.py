@@ -931,7 +931,7 @@ def upload_and_insights_new_controller():
                 # --------------------------------------
                 try:
                     cur.callproc("sp_insert_uploaded_file", [
-                        session_id,
+                        # session_id,
                         file_name,
                         table_name,
                         format_file_size(os.path.getsize(file_path)),              # file_size (no data yet)
@@ -1167,14 +1167,14 @@ def upload_and_insights_new_controller():
     # --- INIT PROGRESS ROW ---
                 cur3.execute("""
     INSERT INTO upload_progress
-    (session_id, file_name, file_hash, processed_rows, total_rows, status)
-    VALUES (%s, %s, %s, 0, %s, 'started')
+    (file_name, file_hash, processed_rows, total_rows, status)
+    VALUES ( %s, %s, 0, %s, 'started')
     ON DUPLICATE KEY UPDATE
         processed_rows=0,
         total_rows=VALUES(total_rows),
         status='started',
         updated_at=NOW()
-    """, (session_id, file_name, file_hash, estimated_total_rows))
+    """, (file_name, file_hash, estimated_total_rows))
 
 
                 company_db.commit()
@@ -1305,7 +1305,7 @@ def upload_and_insights_new_controller():
                 # --------------------------------------
                 try:
                     cur3.callproc("sp_insert_uploaded_file", [
-                        session_id,
+                        # session_id,
                         file_name,
                         table_name,
                         format_file_size(os.path.getsize(path)),

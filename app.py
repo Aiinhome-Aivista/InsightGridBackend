@@ -45,6 +45,8 @@ def before_request():
     # 🔥 allow CORS preflight
     if request.method == "OPTIONS":
         return None
+    if request.path.startswith("/uploads/"):
+        return None
     return attach_company_db()
 
 
