@@ -84,141 +84,152 @@ def create_stored_procedures(db_name):
     c.execute("DROP PROCEDURE IF EXISTS sp_delete_uploaded_file")
     c.execute(
         """
-     IN p_session_id VARCHAR(100),
-        IN p_created_by VARCHAR(100),
-        IN p_file_name VARCHAR(255)
-        )
+    CREATE PROCEDURE sp_delete_uploaded_file(
+    IN p_session_id VARCHAR(100),
+    IN p_created_by VARCHAR(100),
+    IN p_file_name VARCHAR(255)
+)
 proc_block:
-        BEGIN
-            DECLARE v_table_name VARCHAR(255);
-            DECLARE v_user_exists INT DEFAULT 0;
-            DECLARE v_table_exists INT DEFAULT 0;
-            DECLARE v_query_dep INT DEFAULT 0;
-            DECLARE v_report_dep INT DEFAULT 0;
+BEGIN
+    DECLARE v_table_name VARCHAR(255);
+    DECLARE v_user_exists INT DEFAULT 0;
+    DECLARE v_table_exists INT DEFAULT 0;
+    DECLARE v_query_dep INT DEFAULT 0;
+    DECLARE v_report_dep INT DEFAULT 0;
 
-            /* Validate session + user */
-            SELECT COUNT(*) INTO v_user_exists
-            FROM users
-            WHERE user_id = p_created_by
-            AND session_id = p_session_id;
+    /* --------------------------------
+       Validate session + user
+    -------------------------------- */
+    SELECT COUNT(*) INTO v_user_exists
+    FROM users
+    WHERE user_id = p_created_by
+      AND session_id = p_session_id;
 
-            IF v_user_exists = 0 THEN
-                SELECT 'Invalid session_id or created_by' AS status;
-                LEAVE proc_block;
-            END IF;
+    IF v_user_exists = 0 THEN
+        SELECT 'Invalid session_id or created_by' AS status;
+        LEAVE proc_block;
+    END IF;
 
-            /*Resolve table_name */
-            SELECT table_name
-            INTO v_table_name
-            FROM uploaded_files
-            WHERE session_id = p_session_id
-            AND created_by = p_created_by
-            AND file_name = p_file_name
-            LIMIT 1;
+    /* --------------------------------
+       Resolve table_name
+    -------------------------------- */
+    SELECT table_name
+    INTO v_table_name
+    FROM uploaded_files
+    WHERE session_id = p_session_id
+      AND created_by = p_created_by
+      AND file_name = p_file_name
+    LIMIT 1;
 
-            IF v_table_name IS NULL THEN
-                SELECT 'No file metadata found' AS status;
-                LEAVE proc_block;
-            END IF;
+    IF v_table_name IS NULL THEN
+        SELECT 'No file metadata found' AS status;
+        LEAVE proc_block;
+    END IF;
 
-            /* QUERY dependency check */
-            SELECT COUNT(*) INTO v_query_dep
+    /* --------------------------------
+       QUERY dependency count
+    -------------------------------- */
+    SELECT COUNT(*) INTO v_query_dep
+    FROM query_history
+    WHERE session_id = p_session_id
+      AND created_by = p_created_by
+      AND table_names IS NOT NULL
+      AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
+      AND is_execute = 1;
+
+    /* --------------------------------
+       REPORT dependency count
+    -------------------------------- */
+    SELECT COUNT(*) INTO v_report_dep
+    FROM saved_reports sr
+    JOIN query_history q ON q.id = sr.query_history_id
+    WHERE sr.session_id = p_session_id
+      AND sr.user_id = p_created_by
+      AND q.table_names IS NOT NULL
+      AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name));
+
+    /* --------------------------------
+       COMBINED DEPENDENCY HANDLING
+    -------------------------------- */
+    IF v_query_dep > 0 OR v_report_dep > 0 THEN
+
+        /* Result set 1 → status */
+        SELECT CONCAT(
+            'Table "', v_table_name,
+            '" is already used in ',
+            IF(v_report_dep > 0, CONCAT(v_report_dep, ' reports'), ''),
+            IF(v_report_dep > 0 AND v_query_dep > 0, ' and ', ''),
+            IF(v_query_dep > 0, CONCAT(v_query_dep, ' queries'), '')
+        ) AS status;
+
+        /* Result set 2 → query dependency list */
+        IF v_query_dep > 0 THEN
+            SELECT
+                id,
+                query_title,
+                created_by,
+                created_at
             FROM query_history
             WHERE session_id = p_session_id
-            AND created_by = p_created_by
-            AND table_names IS NOT NULL
-            AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
-            AND is_execute = 1;
+              AND created_by = p_created_by
+              AND table_names IS NOT NULL
+              AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
+              AND is_execute = 1
+            ORDER BY created_at DESC;
+        END IF;
 
-            IF v_query_dep > 0 THEN
-                -- Result set 1: status
-                SELECT CONCAT(
-                    'Table "', v_table_name,
-                    '" is already used in ', v_query_dep,
-                    ' queries'
-                ) AS status;
-
-                -- Result set 2: query dependency list
-                SELECT
-                    id,
-                    query_title,
-                    created_by,
-                    created_at
-                FROM query_history
-                WHERE session_id = p_session_id
-                AND created_by = p_created_by
-                AND table_names IS NOT NULL
-                AND JSON_CONTAINS(table_names, JSON_QUOTE(v_table_name))
-                AND is_execute = 1
-                ORDER BY created_at DESC;
-
-                LEAVE proc_block;
-            END IF;
-
-            /* REPORT dependency check */
-            SELECT COUNT(*) INTO v_report_dep
+        /* Result set 3 → report dependency list */
+        IF v_report_dep > 0 THEN
+            SELECT
+                sr.report_id,
+                sr.report_name,
+                sr.created_at
             FROM saved_reports sr
-            JOIN query_history q
-            ON q.id = sr.query_history_id
+            JOIN query_history q ON q.id = sr.query_history_id
             WHERE sr.session_id = p_session_id
-            AND sr.user_id = p_created_by
-            AND q.table_names IS NOT NULL
-            AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name));
+              AND sr.user_id = p_created_by
+              AND q.table_names IS NOT NULL
+              AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name))
+            ORDER BY sr.created_at DESC;
+        END IF;
 
-            IF v_report_dep > 0 THEN
-                -- Result set 1: status
-                SELECT CONCAT(
-                    'Table "', v_table_name,
-                    '" is already used in ', v_report_dep,
-                    ' reports'
-                ) AS status;
+        LEAVE proc_block;
+    END IF;
 
-                -- Result set 2: report dependency list
-                SELECT
-                    sr.report_id,
-                    sr.report_name,
-                    sr.created_at
-                FROM saved_reports sr
-                JOIN query_history q
-                ON q.id = sr.query_history_id
-                WHERE sr.session_id = p_session_id
-                AND sr.user_id = p_created_by
-                AND q.table_names IS NOT NULL
-                AND JSON_CONTAINS(q.table_names, JSON_QUOTE(v_table_name))
-                ORDER BY sr.created_at DESC;
+    /* --------------------------------
+       Table MUST exist
+    -------------------------------- */
+    SELECT COUNT(*) INTO v_table_exists
+    FROM information_schema.tables
+    WHERE table_schema = DATABASE()
+      AND table_name = v_table_name;
 
-                LEAVE proc_block;
-            END IF;
+    IF v_table_exists = 0 THEN
+        SELECT 'Table does not exist - delete operation aborted' AS status;
+        LEAVE proc_block;
+    END IF;
 
-            /*Table MUST exist */
-            SELECT COUNT(*) INTO v_table_exists
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = v_table_name;
+    /* --------------------------------
+       Safe delete
+    -------------------------------- */
+    START TRANSACTION;
 
-            IF v_table_exists = 0 THEN
-                SELECT 'Table does not exist - delete operation aborted' AS status;
-                LEAVE proc_block;
-            END IF;
+    SET @drop_sql = CONCAT('DROP TABLE `', v_table_name, '`');
+    PREPARE stmt FROM @drop_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
 
-            /* Safe delete */
-            START TRANSACTION;
+    DELETE FROM uploaded_files
+    WHERE session_id = p_session_id
+      AND created_by = p_created_by
+      AND table_name = v_table_name;
 
-            SET @drop_sql = CONCAT('DROP TABLE `', v_table_name, '`');
-            PREPARE stmt FROM @drop_sql;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
+    COMMIT;
 
-            DELETE FROM uploaded_files
-            WHERE session_id = p_session_id
-            AND created_by = p_created_by
-            AND table_name = v_table_name;
+    SELECT 'Table and all related metadata deleted successfully' AS status;
 
-            COMMIT;
-
-            SELECT 'Table and all related metadata deleted successfully' AS status;
-    END
-    """
+END
+"""
     )
 
     # =====================================================
