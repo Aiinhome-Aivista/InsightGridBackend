@@ -35,6 +35,7 @@ def delete_uploaded_file_controller():
         )
 
         results = list(cursor.stored_results())
+        conn.commit()
 
         if not results:
             return build_response(
@@ -49,26 +50,71 @@ def delete_uploaded_file_controller():
         status_row = results[0].fetchone()
         status_msg = status_row.get("status", "Unknown status")
 
-        # -------------------------------
-        # RESULT SET 2 → DEPENDENCIES (optional)
-        # -------------------------------
-        dependency_list = []
-        if len(results) > 1:
-            dependency_list = results[1].fetchall()
+        # # -------------------------------
+        # # RESULT SET 2 → DEPENDENCIES (optional)
+        # # -------------------------------
+        # dependency_list = []
+        # if len(results) > 1:
+        #     dependency_list = results[1].fetchall()
 
-        conn.commit()
+        
+
+        # # -------------------------------
+        # # FINAL RESPONSE → ALWAYS 200
+        # # -------------------------------
+        # if dependency_list:
+        #     return build_response(
+        #         False,
+        #         status_msg,
+        #         200,
+        #         data={"dependencies": dependency_list}
+        #     )
 
         # -------------------------------
-        # FINAL RESPONSE → ALWAYS 200
+        # COLLECT DEPENDENCIES SAFELY
         # -------------------------------
-        if dependency_list:
+        report_deps = []
+        query_deps = []
+        base_status = "Dependency exists"
+
+        for rs in results:
+            rows = rs.fetchall()
+            for row in rows:
+                if "status" in row:
+                    base_status = row["status"]
+                elif "report_id" in row:
+                    report_deps.append(row)
+                elif "query_title" in row:
+                    query_deps.append(row)
+
+        # -------------------------------
+        # DEPENDENCY RESPONSE
+        # -------------------------------
+        if report_deps or query_deps:
+            report_count = len(report_deps)
+            query_count = len(query_deps)
+
+            if report_count and query_count:
+                status_msg = (
+                    f'Table "{file_name}" is already used in '
+                    f'{report_count} reports and {query_count} queries'
+                )
+            elif report_count:
+                status_msg = (
+                    f'Table "{file_name}" is already used in {report_count} reports'
+                )
+            else:
+                status_msg = (
+                    f'Table "{file_name}" is already used in {query_count} queries'
+                )
+
             return build_response(
                 False,
                 status_msg,
                 200,
-                data={"dependencies": dependency_list}
+                data={"dependencies": report_deps + query_deps}
             )
-
+        
         if "deleted successfully" in status_msg.lower():
             return build_response(
                 True,
@@ -94,5 +140,3 @@ def delete_uploaded_file_controller():
     finally:
         if cursor:
             cursor.close()
-        
-
