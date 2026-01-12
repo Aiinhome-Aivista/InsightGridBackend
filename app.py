@@ -26,6 +26,7 @@ from controller.superadmin_login import superadmin_login_controller
 from controller.company_login import company_login_controller
 from controller.get_all_companies import get_all_companies_controller
 from controller.admin_company_delete import delete_company
+from controller.ai_chart_controller import modify_chart_controller
 
 # app = Flask(__name__,
 #     static_url_path="/uploads",
@@ -144,6 +145,10 @@ def get_all_companies_route():
 @app.route("/admin/company_delete", methods=["POST"])
 def company_delete_route():
     return delete_company()
+
+@app.route("/modify_chart", methods=["POST"])
+def modify_chart_route():
+    return modify_chart_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":

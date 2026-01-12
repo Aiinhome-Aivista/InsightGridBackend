@@ -1,7 +1,7 @@
 import json
 import re
 from flask import request,g
-from helper.helperFunctions import build_response
+from helper.helperFunctions import build_response, format_dates_in_rows
 from model.llm_client import call_llm
 from helper.visualization_engine import build_insights,is_groupby_allowed,get_column_types
 import time
@@ -348,7 +348,7 @@ def run_select_query(select_query):
 
         # cursor.execute(select_query)
         rows = cursor.fetchall()
-        
+        rows = format_dates_in_rows(rows)
           #  REMOVE row_hash FROM ROW DATA
         for r in rows:
             r.pop("row_hash", None)

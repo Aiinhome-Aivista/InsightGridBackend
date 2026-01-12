@@ -4,7 +4,8 @@ from flask import jsonify,g
 from dotenv import load_dotenv
 import uuid
 import hashlib
-
+import base64
+from datetime import datetime, date
 # ---------- Load Environment Variables ----------
 load_dotenv()
 
@@ -78,7 +79,50 @@ def allowed_logo(filename):
     
 def make_file_hash(session_id, file_name):
     return hashlib.md5(f"{session_id}|{file_name}".encode()).hexdigest()
-    
+  
+  
+
+def save_base64_image(base64_str, path):
+    header, data = base64_str.split(",", 1)
+    with open(path, "wb") as f:
+        f.write(base64.b64decode(data))  
+        
+POSSIBLE_FORMATS = [
+    "%a, %d %b %Y %H:%M:%S GMT",   # Tue, 16 Nov 2021 08:40:43 GMT
+    "%Y-%m-%d %H:%M:%S",           # MySQL datetime
+    "%Y-%m-%d",                    # MySQL date
+    "%Y-%m-%dT%H:%M:%S",           # ISO
+]
+
+def try_parse_datetime(value):
+    for fmt in POSSIBLE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt)
+        except Exception:
+            pass
+    return None
+
+def format_dates_in_rows(rows):
+    for row in rows:
+        for key, value in row.items():
+
+            # 🔹 Native DATETIME
+            if isinstance(value, datetime):
+                formatted = value.strftime("%d %b %Y, %I:%M %p")
+                row[key] = formatted.lstrip("0").replace(" 0", " ")
+
+            # 🔹 Native DATE
+            elif isinstance(value, date):
+                row[key] = value.strftime("%d-%m-%Y")
+
+            # 🔹 STRING DATE/TIME
+            elif isinstance(value, str):
+                parsed = try_parse_datetime(value)
+                if parsed:
+                    formatted = parsed.strftime("%d %b %Y, %I:%M %p")
+                    row[key] = formatted.lstrip("0").replace(" 0", " ")
+
+    return rows          
        
 
 
