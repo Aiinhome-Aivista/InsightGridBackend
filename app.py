@@ -31,6 +31,8 @@ from controller.admin_company_delete import delete_company
 from controller.ai_chart_controller import modify_chart_controller
 from controller.get_all_company_admins import get_all_company_admins_controller
 from controller.company_get_users import get_company_users_controller
+from controller.contact_handel import handle_contact_controller
+
 # app = Flask(__name__,
 #     static_url_path="/uploads",
 #     static_folder=os.getenv("UPLOAD_FOLDER"))
@@ -164,6 +166,10 @@ def company_code_dropdown():
 @app.route("/admin/company_get_users", methods=["POST"])
 def company_get_user_route():
     return get_company_users_controller()
+
+@app.route("/contact", methods=["POST"])
+def contact():
+    return handle_contact_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
