@@ -158,7 +158,7 @@ def attach_company_db():
     
     )
 
-    if request.endpoint in skip_routes:
+    if request.path in skip_routes:
         return
 
     # 🔥 ONLY session_id
