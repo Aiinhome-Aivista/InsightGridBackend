@@ -1106,6 +1106,8 @@ CREATE TABLE IF NOT EXISTS user_roles (
     user_id VARCHAR(50) UNIQUE,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
+    phone_number VARCHAR(20),
+    address VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
 
     app_role_id INT NOT NULL,
@@ -1117,7 +1119,12 @@ CREATE TABLE IF NOT EXISTS user_roles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     updated_by VARCHAR(50),
-    updated_at DATETIME DEFAULT NULL
+    updated_at DATETIME DEFAULT NULL,
+    is_active TINYINT DEFAULT 1,
+    is_deleted TINYINT DEFAULT 0,
+    deleted_by VARCHAR(50),
+    deleted_at TIMESTAMP NULL
+   
 )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
 """
         )

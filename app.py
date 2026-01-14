@@ -1,7 +1,9 @@
 import os
 from flask import Flask, request, g, send_from_directory
 from flask_cors import CORS
+from controller import company_get_users
 from controller.company_user_register import company_user_register_controller
+from controller.get_company_code_dropdown import get_company_code_dropdown_controller
 from controller.get_file_status import get_file_status_controller
 from controller.get_full_table_info import get_full_table_info_controller
 from controller.get_dashboard_data import get_dashboard_data_controller
@@ -27,6 +29,9 @@ from controller.company_login import company_login_controller
 from controller.get_all_companies import get_all_companies_controller
 from controller.admin_company_delete import delete_company
 from controller.ai_chart_controller import modify_chart_controller
+from controller.get_all_company_admins import get_all_company_admins_controller
+from controller.company_get_users import get_company_users_controller
+from controller.contact_handel import handle_contact_controller
 
 # app = Flask(__name__,
 #     static_url_path="/uploads",
@@ -149,6 +154,22 @@ def company_delete_route():
 @app.route("/modify_chart", methods=["POST"])
 def modify_chart_route():
     return modify_chart_controller()
+
+@app.route("/admin/get_all_company_admins", methods=["GET"])
+def get_all_company_admins_route():
+    return get_all_company_admins_controller()
+
+@app.route("/admin/company_code_dropdown", methods=["GET"])
+def company_code_dropdown():
+    return get_company_code_dropdown_controller()
+
+@app.route("/admin/company_get_users", methods=["POST"])
+def company_get_user_route():
+    return get_company_users_controller()
+
+@app.route("/contact", methods=["POST"])
+def contact():
+    return handle_contact_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
