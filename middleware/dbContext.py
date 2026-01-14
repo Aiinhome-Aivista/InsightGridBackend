@@ -155,6 +155,8 @@ def attach_company_db():
         "/admin/company_register",
         "/admin/company/admin_register",
         "/admin/get_companies",
+        "/admin/get_all_company_admins",
+        "/admin/company_code_dropdown",
     
     )
 

@@ -22,7 +22,7 @@ def admin_company_admin_register_controller():
 
     try:
         data = request.get_json() or {}
-
+        admin_user_id = data.get("id")  
         session_id = data.get("session_id")
         created_by = data.get("created_by")      # SuperAdmin user_id
 
@@ -30,19 +30,16 @@ def admin_company_admin_register_controller():
         admin_name = data.get("admin_name")
         admin_email = data.get("admin_email")
         admin_password = data.get("admin_password")
+        
+        admin_phone = data.get("phone_number")
+        admin_address = data.get("address")
 
         # --------------------------------------------------
         # BASIC VALIDATION
         # --------------------------------------------------
-        if not all([
-            session_id,
-            created_by,
-            company_code,
-            admin_name,
-            admin_email,
-            admin_password
-        ]):
-            return build_response(False, "Required fields missing", 400)
+        if not session_id or not created_by:
+         return build_response(False, "Required fields missing", 400)
+
 
         # ==================================================
         # STEP 1: SUPER ADMIN VALIDATION (MASTER DB)
@@ -75,7 +72,7 @@ def admin_company_admin_register_controller():
             SELECT id, company_db_name
             FROM companies
             WHERE company_code = %s
-              AND is_active = 1
+              AND is_active = 1 AND is_deleted = 0
         """, (company_code,))
 
         company = cursor.fetchone()
@@ -126,7 +123,35 @@ def admin_company_admin_register_controller():
             )
 
         company_admin_role_id = role["id"]
-        
+        # ==================================================
+        #  UPDATE MODE (admin_user_id আসলে)
+        # ==================================================
+        if admin_user_id:
+            company_cursor.execute("""
+                UPDATE users
+                SET
+                    email = %s,
+                    phone_number = %s,
+                    address = %s,
+                    updated_by = %s,
+                    updated_at = NOW()
+                WHERE id = %s AND is_deleted = 0
+            """, (
+                admin_email,
+                admin_phone,
+                admin_address,
+                created_by,
+                admin_user_id
+            ))
+
+            company_conn.commit()
+
+            return build_response(
+                True,
+                "Company Admin updated successfully",
+                200
+            )
+
         # ==================================================
         # STEP 5.5: CHECK IF COMPANY ADMIN ALREADY EXISTS
         # (One Company → One CompanyAdmin rule)
@@ -134,14 +159,14 @@ def admin_company_admin_register_controller():
         company_cursor.execute("""
             SELECT id
             FROM users
-            WHERE app_role_id = %s
+            WHERE app_role_id = %s AND is_deleted = 0
         """, (company_admin_role_id,))
 
         if company_cursor.fetchone():
             return build_response(
                 False,
                 "companyadmin already exists for this company",
-                409
+                400
             )
 
 
@@ -149,14 +174,14 @@ def admin_company_admin_register_controller():
         # STEP 6: CHECK DUPLICATE ADMIN EMAIL (company DB)
         # ==================================================
         company_cursor.execute("""
-            SELECT id FROM users WHERE email = %s
+            SELECT id FROM users WHERE email = %s AND is_deleted = 0
         """, (admin_email,))
 
         if company_cursor.fetchone():
             return build_response(
                 False,
                 "Company Admin with this email already exists",
-                409
+                400
             )
 
         # ==================================================
@@ -174,6 +199,8 @@ def admin_company_admin_register_controller():
                 user_id,
                 full_name,
                 email,
+                phone_number,
+                address,
                 password_hash,
                 app_role_id,
                 company_id,
@@ -181,11 +208,13 @@ def admin_company_admin_register_controller():
                 created_by,
                 created_at
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
         """, (
             f"admin_{company_code}",
             admin_name,
             admin_email,
+            admin_phone,
+            admin_address,
             hashed_password,
             company_admin_role_id,
             company_id,
