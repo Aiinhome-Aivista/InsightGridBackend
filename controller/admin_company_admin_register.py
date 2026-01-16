@@ -2,9 +2,16 @@ from flask import request
 import bcrypt
 import uuid
 import os
+
+from flask.cli import load_dotenv
 from database.dbConnection import get_master_db,get_company_db
 from helper.helperFunctions import build_response
-
+from helper.mailer import send_email
+from helper.email_templates import (
+    company_admin_created_company_mail,
+    company_admin_created_admin_mail
+)
+load_dotenv()
 
 # ==========================================================
 # ENV CONFIG
@@ -69,7 +76,7 @@ def admin_company_admin_register_controller():
         # STEP 2: FETCH COMPANY INFO (MASTER DB)
         # ==================================================
         cursor.execute("""
-            SELECT id, company_db_name
+            SELECT id, company_name, company_email, company_db_name
             FROM companies
             WHERE company_code = %s
               AND is_active = 1 AND is_deleted = 0
@@ -82,7 +89,8 @@ def admin_company_admin_register_controller():
 
         company_id = company["id"]
         company_db_name = company["company_db_name"]
-
+        company_email = company["company_email"]   # ✅ NOW AVAILABLE
+        company_name = company["company_name"]
         # ==================================================
         # STEP 3: HASH PASSWORD
         # ==================================================
@@ -94,13 +102,6 @@ def admin_company_admin_register_controller():
         # ==================================================
         # STEP 4: CONNECT COMPANY DB
         # ==================================================
-        # company_conn = mysql.connector.connect(
-        #     host=DB_HOST,
-        #     user=DB_USER,
-        #     password=DB_PASS,
-        #     database=company_db_name
-        # )
-
         company_conn = get_company_db(company_db_name)
         company_cursor = company_conn.cursor(dictionary=True)
 
@@ -223,7 +224,27 @@ def admin_company_admin_register_controller():
         ))
 
         company_conn.commit()
+         
+        # =============================
+        # SEND MAILS (ONLY ON CREATE)
+        # =============================
+        login_url = os.getenv("COMPANY_ADMIN_LOGIN_URL")
+        mail_data = {
+            "company_name": company_name, 
+            "company_code": company_code,
+            "admin_name": admin_name,
+            "admin_email": admin_email,
+            "admin_password": admin_password,
+            "login_url": login_url
+        }
 
+        # Mail to Company (info purpose)
+        subject_c, html_c = company_admin_created_company_mail(mail_data)
+        send_email(company_email, subject_c, html_c)
+
+        # Mail to Company Admin (access info)
+        subject_a, html_a = company_admin_created_admin_mail(mail_data)
+        send_email(admin_email, subject_a, html_a) 
         return build_response(
             True,
             "Company Admin registered successfully",

@@ -1,5 +1,3 @@
-# controller/admin_company_register.py
-
 from flask import request
 import mysql.connector
 import os
@@ -8,6 +6,8 @@ from helper.helperFunctions import build_response, allowed_logo
 from datetime import datetime
 import re
 from werkzeug.utils import secure_filename
+from helper.mailer import send_email
+from helper.email_templates import company_registered_email
 
 
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
@@ -836,20 +836,7 @@ END
 # ==========================================================
 def admin_company_register_controller():
     try:
-        # data = request.get_json()
-
-        # company_name = data.get("company_name")
-        # # company_code = data.get("company_code")
-        # company_email = data.get("company_email")
-        # address = data.get("address")
-        # subscription_type = data.get("subscription_type")
-        # from_date = data.get("from_date")
-        # to_date = data.get("to_date")
-
-        # if not company_name or  not company_email:
-        #     return build_response(False, "Required fields missing", 400)
-
-        # 🔹 FORM DATA
+        #  FORM DATA
         company_id = request.form.get("id")
         company_id = int(company_id) if company_id else None
         company_name = request.form.get("company_name")
@@ -859,10 +846,8 @@ def admin_company_register_controller():
         subscription_type = request.form.get("subscription_type")
         from_date = request.form.get("from_date")
         to_date = request.form.get("to_date")
-
         logo_file = request.files.get("company_logo")
         created_by = request.form.get("created_by")
-        print("FORM DATA =>", request.form)
 
         if not company_name or not company_email or not phone_number:
             return build_response(False, "Required fields missing", 400)
@@ -903,7 +888,7 @@ def admin_company_register_controller():
                 master.close()
                 return build_response(False, "Company not found", 404)
 
-            # 🔹 OPTIONAL LOGO UPDATE
+            #  OPTIONAL LOGO UPDATE
             if logo_file:
                 if not allowed_logo(logo_file.filename):
                     return build_response(False, "Only PNG/JPEG allowed", 400)     
@@ -948,7 +933,7 @@ def admin_company_register_controller():
         
         
 
-        # 🔒 LOGO VALIDATION
+        #  LOGO VALIDATION
         logo_path = None
         if logo_file:
             if not allowed_logo(logo_file.filename):
@@ -966,27 +951,6 @@ def admin_company_register_controller():
         company_db_name = f"sahaj_cmp_{company_code}"
         try:
             # insert company
-            # master_cursor.execute(
-            #     """
-            #     INSERT INTO companies
-            #     (company_name, company_code, company_email, phone_number, address,
-            #     subscription_type, from_date, to_date, company_db_name,created_by)
-            #     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            # """,
-            #     (
-            #         company_name,
-            #         company_code,
-            #         company_email,
-            #         phone_number,
-            #         address,
-            #         subscription_type,
-            #         from_date,
-            #         to_date,
-            #         company_db_name,
-            #         created_by
-            #     ),
-            # )
-            # master.commit()
             master_cursor.execute("""
                 INSERT INTO companies
                 (
@@ -1024,7 +988,7 @@ def admin_company_register_controller():
             return build_response(
                 False, "Company already exists. Please retry with some other.", 409
             )
-        # 🔹 SAVE LOGO
+        #  SAVE LOGO
         if logo_file:
             company_folder = os.path.join(
                 UPLOAD_FOLDER, "companies", company_db_name, "logo"
@@ -1037,7 +1001,7 @@ def admin_company_register_controller():
             full_path = os.path.join(company_folder, filename)
             logo_file.save(full_path)
 
-            # ✅ UI-FRIENDLY PATH (RELATIVE URL)
+            #  UI-FRIENDLY PATH (RELATIVE URL)
             logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
 
             master_cursor.execute(
@@ -1091,12 +1055,6 @@ CREATE TABLE IF NOT EXISTS user_roles (
         )
 
         # Insert default Admin role
-        #     c.execute("""
-        # INSERT IGNORE INTO user_roles (id, role_name)
-        # VALUES (1, 'Admin')
-        # """)
-
-        # ---------------- USERS ----------------
         # ---------------- USERS (COMPANY DB) ----------------
         c.execute(
             f"""
@@ -1237,6 +1195,26 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
         # CREATE STORED PROCEDURES
         create_stored_procedures(company_db_name)
+        # =============================
+        # SEND COMPANY REGISTER MAIL
+        # =============================
+        company_data = {
+            "company_name": company_name,
+            "company_code": company_code,
+            "company_email": company_email,
+            "phone_number": phone_number,
+            "subscription_type": subscription_type,
+            "from_date": from_date,
+            "to_date": to_date
+        }
+
+        subject, html_body = company_registered_email(company_data)
+
+        send_email(
+            to_email=company_email,   #  company er email
+            subject=subject,
+            html_body=html_body
+        )
 
         return build_response(
             True,

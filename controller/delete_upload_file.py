@@ -51,26 +51,6 @@ def delete_uploaded_file_controller():
         status_msg = status_row.get("status", "Unknown status")
 
         # # -------------------------------
-        # # RESULT SET 2 → DEPENDENCIES (optional)
-        # # -------------------------------
-        # dependency_list = []
-        # if len(results) > 1:
-        #     dependency_list = results[1].fetchall()
-
-        
-
-        # # -------------------------------
-        # # FINAL RESPONSE → ALWAYS 200
-        # # -------------------------------
-        # if dependency_list:
-        #     return build_response(
-        #         False,
-        #         status_msg,
-        #         200,
-        #         data={"dependencies": dependency_list}
-        #     )
-
-        # -------------------------------
         # COLLECT DEPENDENCIES SAFELY
         # -------------------------------
         report_deps = []

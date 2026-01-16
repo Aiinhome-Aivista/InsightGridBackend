@@ -36,12 +36,12 @@ def get_full_table_info_controller():
         results = list(cursor.stored_results())
 
         # ----------------------
-        # 1️⃣ TABLE LIST
+        # TABLE LIST
         # ----------------------
         table_list = results[0].fetchall()  # [{label,value}, ...]
 
         # ----------------------
-        # 2️⃣ COLUMN METADATA
+        # COLUMN METADATA
         # ----------------------
         col_meta_list = results[1].fetchall()
 
@@ -59,13 +59,13 @@ def get_full_table_info_controller():
             })
 
         # ----------------------
-        # 3️⃣ INSIGHTS
+        # INSIGHTS
         # ----------------------
         insights_list = results[2].fetchall()
         insights_map = {i["table_name"]: i["insights"] for i in insights_list}
 
         # ----------------------
-        # 4️⃣ FETCH TABLE DATA SEPARATELY
+        # FETCH TABLE DATA SEPARATELY
         # ----------------------
         table_data_map = {}
         for t in table_list:
@@ -83,7 +83,7 @@ def get_full_table_info_controller():
         db.close()
 
         # ----------------------
-        # 5️⃣ MERGE EVERYTHING IN A SINGLE CLEAN OBJECT
+        # MERGE EVERYTHING IN A SINGLE CLEAN OBJECT
         # ----------------------
         details = {}
 

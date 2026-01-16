@@ -6,7 +6,7 @@ def get_all_company_admins_controller():
         master = get_master_db()
         mcur = master.cursor(dictionary=True)
 
-        # 🔹 STEP 1: Get all active companies
+        # STEP 1: Get all active companies
         mcur.execute("""
             SELECT 
                 id AS company_id,
@@ -21,13 +21,13 @@ def get_all_company_admins_controller():
 
         result = []
 
-        # 🔹 STEP 2: Loop each company DB
+        #  STEP 2: Loop each company DB
         for c in companies:
             try:
                 company_db = get_company_db(c["company_db_name"])
                 ccur = company_db.cursor(dictionary=True)
 
-                # 🔹 Fetch company admin
+                #  Fetch company admin
                 ccur.execute("""
                     SELECT
                         id,
@@ -67,7 +67,7 @@ def get_all_company_admins_controller():
                 company_db.close()
 
             except Exception as inner_err:
-                # 🔥 If company DB missing / corrupted → skip safely
+                #  If company DB missing / corrupted → skip safely
                 print(f"Skipping {c['company_db_name']} → {inner_err}")
                 continue
 

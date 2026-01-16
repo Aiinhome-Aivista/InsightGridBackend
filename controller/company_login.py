@@ -1,4 +1,3 @@
-# controller/auth_company_login.py
 from flask import request
 import uuid, bcrypt
 from database.dbConnection import get_master_db, get_company_db
@@ -68,7 +67,7 @@ def company_login_controller():
         "UPDATE users SET session_id=%s WHERE user_id=%s", (session_id, user["user_id"])
     )
     company_db.commit()
-    # 🔴 ADD THIS BLOCK (AFTER company_db.commit())
+    # ADD THIS BLOCK (AFTER company_db.commit())
 
     mcur = master.cursor()
     mcur.execute("""
@@ -86,12 +85,6 @@ def company_login_controller():
     master.commit()
     mcur.close()
 
-    # return build_response(True, "Login successful", 200, {
-    #     "user_id": user["user_id"],
-    #     "role": user["role_name"],
-    #     "company_code": company_code,
-    #     "session_id": session_id
-    # })
     # ---- build full logo url for PDF ----
     base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
     logo_path = company["company_logo"]        # /uploads/companies/...

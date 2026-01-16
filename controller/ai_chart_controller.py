@@ -185,7 +185,7 @@ def modify_chart_controller():
                 elif x == y:
                     msg = f"Axis swap is not possible because both xAxis and yAxis are set to '{x}'."
                 else:
-                    continue  # ✅ valid → allow LLM
+                    continue  #  valid → allow LLM
 
                 return build_response(
                     True,

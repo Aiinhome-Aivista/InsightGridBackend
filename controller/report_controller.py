@@ -45,9 +45,6 @@ def save_report_controller():
             return build_response(False, "Invalid session or user", 401)
 
         # Fetch row_affected
-        # cur.execute("""
-        #     SELECT rows_effected FROM query_history WHERE id=%s
-        # """, (query_history_id,))
         cur.execute("""
             SELECT row_count FROM query_history WHERE id=%s
         """, (query_history_id,))
@@ -99,17 +96,17 @@ def save_report_controller():
                     "path": f"/uploads/reports/{report_id}/{filename}"
                 })
 
-            # 🔥 existing report_config JSON নাও
+            #  existing report_config JSON 
             report_config = (
                 report_config
                 if isinstance(report_config, dict)
                 else json.loads(report_config)
             )
 
-            # 🔥 image info JSON এর ভিতরে ঢোকাও
+            #  image info JSON 
             report_config["chart_images"] = saved_images
 
-            # 🔥 DB update
+            #  DB update
             cur.execute("""
                 UPDATE saved_reports
                 SET report_config=%s
@@ -183,7 +180,7 @@ def report_list_controller():
                     else json.loads(r["report_config"])
                 )
 
-                # 🔥 add full url for chart images
+                #  add full url for chart images
             if "chart_images" in report_config:
                     base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
                     for img in report_config["chart_images"]:
@@ -206,7 +203,7 @@ def report_list_controller():
 
                 # ===== SAME AS OLD =====
                 "query": {
-                    "query_id": r["query_history_id"],   # 🔥 map here
+                    "query_id": r["query_history_id"],   #  map here
                     "query_name": r["query_title"],
                     "ai_responce": r["ai_response"]
                 }

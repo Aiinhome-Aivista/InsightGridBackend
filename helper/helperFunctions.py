@@ -106,16 +106,16 @@ def format_dates_in_rows(rows):
     for row in rows:
         for key, value in row.items():
 
-            # 🔹 Native DATETIME
+            #  Native DATETIME
             if isinstance(value, datetime):
                 formatted = value.strftime("%d %b %Y, %I:%M %p")
                 row[key] = formatted.lstrip("0").replace(" 0", " ")
 
-            # 🔹 Native DATE
+            #  Native DATE
             elif isinstance(value, date):
                 row[key] = value.strftime("%d-%m-%Y")
 
-            # 🔹 STRING DATE/TIME
+            #  STRING DATE/TIME
             elif isinstance(value, str):
                 parsed = try_parse_datetime(value)
                 if parsed:

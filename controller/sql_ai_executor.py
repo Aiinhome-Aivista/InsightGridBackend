@@ -72,7 +72,7 @@ def validate_tables_and_columns_pre_llm(user_query, schema_context):
         if col not in [c.lower() for c in schema_context.get(table, [])]:
             errors.append(f"Column '{col}' does not exist in table '{table}'")
 
-    # 🚨 IMPORTANT: if user mentioned a column via synonym but it's not in schema
+    #  IMPORTANT: if user mentioned a column via synonym but it's not in schema
     text = user_query.lower()
     for phrase, real_col in COLUMN_SYNONYMS.items():
         if phrase in text:
@@ -144,11 +144,11 @@ def chat_endpoint_controller():
         # COMPANY DB MUST ALREADY EXIST
         # (set by attach_company_db)
         # -----------------------------
-        # company db attach হয়েছে কিনা
+        # company db attach
         if not hasattr(g, "company_db") or not hasattr(g, "created_by"):
             return build_response(False, "Invalid session", 401)
 
-        created_by = g.created_by   # 🔥 THIS IS IMPORTANT
+        created_by = g.created_by   #  THIS IS IMPORTANT
         # ======================================================
         # STEP 1 — Fetch table names from uploaded_files
         # ======================================================
@@ -263,7 +263,7 @@ ABSOLUTE SECURITY RULES:
         ai_sql = call_llm(final_prompt).strip()
         select_query = extract_select_query(ai_sql)
 
-        # 1️⃣ must extract ONE SELECT
+        # must extract ONE SELECT
         if not select_query:
             return build_response(
                 False,
@@ -271,7 +271,7 @@ ABSOLUTE SECURITY RULES:
                 400
             )
 
-        # 2️⃣ block DDL / DML / TCL / SET / non-SELECT
+        # block DDL / DML / TCL / SET / non-SELECT
         if not is_safe_select(select_query):
             return build_response(
                 False,
@@ -330,12 +330,6 @@ def extract_select_query(ai_response):
 def run_select_query(select_query):
     try:
         # -----------------------------
-        # COMPANY DB MUST ALREADY EXIST
-        # (set by attach_company_db)
-        # -----------------------------
-        # if not hasattr(g, "company_db"):
-        #     return False, None, "Invalid session"   
-
         conn = g.company_db
         cursor = conn.cursor(dictionary=True)
 
@@ -353,7 +347,7 @@ def run_select_query(select_query):
         for r in rows:
             r.pop("row_hash", None)
 
-        end_time = time.time()     # ⏱️ END
+        end_time = time.time()     #  END
         elapsed = end_time - start_time
         #  REMOVE row_hash FROM COLUMNS
         column_names = [
@@ -381,7 +375,6 @@ def extract_main_table_from_query(sql):
     return match.group(1) if match else None
 
 def sanitize_group_by(select_sql: str, table_name: str):
-       # 🔥 aggregation না থাকলে GROUP BY তুলে দাও
     if not is_aggregation_query(select_sql):
         return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
 
@@ -404,7 +397,6 @@ def sanitize_group_by(select_sql: str, table_name: str):
         if ctype and is_groupby_allowed(col_name, ctype):
             safe_cols.append(col)
 
-    # ❌ valid group by না থাকলে → পুরো GROUP BY remove
     if not safe_cols:
         return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
 
@@ -427,32 +419,16 @@ def execute_sql_endpoint_controller():
         if not select_query:
             return build_response(False, "Failed to extract SELECT query", 400)
 
-        # ✅ 1. only SELECT allowed
+        #  only SELECT allowed
         if not is_safe_select(select_query):
             return build_response(False, "Only SELECT queries are allowed", 400)
-        # ✅ 4. execute
-        # success, results, msg = run_select_query(select_query)
-
-        # if success:
-        #     total = results.get("total_rows", 0)
-        #      # 🔥 ADD-ON INSIGHTS (NO EXISTING CHANGE)
-        #     table_name = g.get("last_used_table")  # set earlier when query executed
-        #     visualization = build_insights(
-        #         table_name,
-        #         results.get("columns", [])
-        #     )
-
-        #     results["visualization"] = visualization  #  ONLY NEW KEY
-
-        #     msg = "Query executed successfully, but no data found." if total == 0 \
-        #           else f"Successfully fetched {total} rows."
-        #     return build_response(True, msg, 200, results)
+       
         success, results, msg = run_select_query(select_query)
 
         if success:
 
 
-            # 🔥 2️⃣ NORMAL TABLE QUERY (UNCHANGED)
+            # NORMAL TABLE QUERY (UNCHANGED)
             total = results.get("total_rows", 0)
 
             table_name = g.get("last_used_table")

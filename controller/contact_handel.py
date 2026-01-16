@@ -34,7 +34,7 @@ def send_email(name, user_email, subject, message_body):
         return True
 
     except Exception as e:
-        print("❌ Error sending email:", e)
+        print(" Error sending email:", e)
         return False
 
 

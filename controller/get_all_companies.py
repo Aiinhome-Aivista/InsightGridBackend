@@ -15,7 +15,7 @@ def get_all_companies_controller():
         cursor.close()
         master.close()
 
-        # ✅ DIRECT DATA RETURN (NO EXTRA OBJECT)
+        #  DIRECT DATA RETURN (NO EXTRA OBJECT)
         return build_response(
             True,
             "Company list fetched successfully",
