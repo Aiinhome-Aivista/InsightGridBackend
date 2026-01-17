@@ -96,7 +96,7 @@ WHERE c.company_code = %s
     mcur.close()
     master.close()
     # ---- build full logo url for PDF ----
-    base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
+    base_url = request.host_url.rstrip("/") + "/sahajinsight"  # http://127.0.0.1:3008
     logo_path = company["company_logo"]        # /uploads/companies/...
 
     company_logo_url = (
