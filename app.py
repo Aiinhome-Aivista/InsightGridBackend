@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, g, send_from_directory
 from flask_cors import CORS
 from controller import company_get_users
+from controller.company_logo_controller import update_company_logo_controller
 from controller.company_user_register import company_user_register_controller
 from controller.get_company_code_dropdown import get_company_code_dropdown_controller
 from controller.get_file_status import get_file_status_controller
@@ -19,7 +20,7 @@ from controller.upload_file_new import (
     get_upload_progress_controller as upload_progress_ctrl,
 )
 from controller.report_controller import save_report_controller, report_list_controller
-from controller.admin_company_register import admin_company_register_controller
+from controller.admin_company_register import admin_company_register_controller, get_country_options
 from controller.admin_company_admin_register import (
     admin_company_admin_register_controller,
 )
@@ -170,6 +171,15 @@ def company_get_user_route():
 @app.route("/contact", methods=["POST"])
 def contact():
     return handle_contact_controller()
+
+
+@app.route('/get_country_options', methods=['GET'])
+def country():
+    return get_country_options()
+
+@app.route("/admin/company/logo", methods=["POST"])
+def update_company_logo():
+    return update_company_logo_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":

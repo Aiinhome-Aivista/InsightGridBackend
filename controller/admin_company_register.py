@@ -834,196 +834,489 @@ END
 # ==========================================================
 # SUPER ADMIN → COMPANY REGISTER CONTROLLER
 # ==========================================================
+# def admin_company_register_controller():
+#     try:
+#         #  FORM DATA
+#         company_id = request.form.get("id")
+#         company_id = int(company_id) if company_id else None
+#         company_name = request.form.get("company_name")
+#         company_email = request.form.get("company_email")
+#         phone_number = request.form.get("phone_number")
+#         address = request.form.get("address")
+#         subscription_type = request.form.get("subscription_type")
+#         from_date = request.form.get("from_date")
+#         to_date = request.form.get("to_date")
+#         logo_file = request.files.get("company_logo")
+#         created_by = request.form.get("created_by")
+
+#         if not company_name or not company_email or not phone_number:
+#             return build_response(False, "Required fields missing", 400)
+        
+        
+#         # ==================================================
+#         # UPDATE COMPANY (ONLY IF company_id EXISTS)
+#         # ==================================================
+#         if company_id:
+#             master = get_master_db()
+#             master_cursor = master.cursor(dictionary=True)
+
+#             master_cursor.execute("""
+#                 UPDATE companies
+#                 SET
+#                     company_name=%s,
+#                     company_email=%s,
+#                     phone_number=%s,
+#                     address=%s,
+#                     subscription_type=%s,
+#                     from_date=%s,
+#                     to_date=%s,
+#                     updated_at=NOW()
+#                 WHERE id=%s
+#                 AND is_deleted=0
+#             """, (
+#                 company_name,
+#                 company_email,
+#                 phone_number,
+#                 address,
+#                 subscription_type,
+#                 from_date,
+#                 to_date,
+#                 company_id
+#             ))
+
+#             if master_cursor.rowcount == 0:
+#                 master.close()
+#                 return build_response(False, "Company not found", 404)
+
+#             #  OPTIONAL LOGO UPDATE
+#             if logo_file:
+#                 if not allowed_logo(logo_file.filename):
+#                     return build_response(False, "Only PNG/JPEG allowed", 400)     
+#                 if len(logo_file.read()) > MAX_LOGO_SIZE:
+#                     return build_response(False, "Logo must be < 2MB", 400)
+#                 logo_file.seek(0)  # VERY IMPORTANT
+#                 master_cursor.execute(
+#                     "SELECT company_db_name FROM companies WHERE id=%s",
+#                     (company_id,)
+#                 )
+#                 row = master_cursor.fetchone()
+#                 company_db_name = row["company_db_name"]
+
+#                 company_folder = os.path.join(
+#                     UPLOAD_FOLDER, "companies", company_db_name, "logo"
+#                 )
+#                 os.makedirs(company_folder, exist_ok=True)
+
+#                 ext = secure_filename(logo_file.filename).rsplit(".", 1)[1].lower()
+#                 filename = f"logo.{ext}"
+
+#                 full_path = os.path.join(company_folder, filename)
+#                 logo_file.save(full_path)
+
+#                 logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
+
+#                 master_cursor.execute("""
+#                     UPDATE companies
+#                     SET company_logo=%s
+#                     WHERE id=%s
+#                 """, (logo_path, company_id))
+
+#             master.commit()
+#             master.close()
+
+#             return build_response(
+#                 True,
+#                 "Company updated successfully",
+#                 200
+#             )
+
+        
+        
+
+#         #  LOGO VALIDATION
+#         logo_path = None
+#         if logo_file:
+#             if not allowed_logo(logo_file.filename):
+#                 return build_response(False, "Only PNG/JPEG allowed", 400)
+
+#             if len(logo_file.read()) > MAX_LOGO_SIZE:
+#                 return build_response(False, "Logo must be < 2MB", 400)
+
+#             logo_file.seek(0)  # VERY IMPORTANT
+
+#         master = get_master_db()
+#         master_cursor = master.cursor(dictionary=True)
+#         # compute company code
+#         company_code = generate_company_code(company_name, master_cursor)
+#         company_db_name = f"sahaj_cmp_{company_code}"
+#         try:
+#             # insert company
+#             master_cursor.execute("""
+#                 INSERT INTO companies
+#                 (
+#                     company_name,
+#                     company_code,
+#                     company_email,
+#                     phone_number,
+#                     address,
+#                     subscription_type,
+#                     from_date,
+#                     to_date,
+#                     company_db_name,
+#                     created_by,
+#                     is_active,
+#                     is_deleted,
+#                     created_at
+#                 )
+#                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,NOW())
+#             """, (
+#                 company_name,
+#                 company_code,
+#                 company_email,
+#                 phone_number,
+#                 address,
+#                 subscription_type,
+#                 from_date,
+#                 to_date,
+#                 company_db_name,
+#                 created_by
+#             ))
+#             master.commit()
+#             company_id = master_cursor.lastrowid
+#         except mysql.connector.IntegrityError:
+#             master.rollback()
+#             return build_response(
+#                 False, "Company already exists. Please retry with some other.", 409
+#             )
+#         #  SAVE LOGO
+#         if logo_file:
+#             company_folder = os.path.join(
+#                 UPLOAD_FOLDER, "companies", company_db_name, "logo"
+#             )
+#             os.makedirs(company_folder, exist_ok=True)
+
+#             ext = secure_filename(logo_file.filename).rsplit(".", 1)[1].lower()
+#             filename = f"logo.{ext}"
+
+#             full_path = os.path.join(company_folder, filename)
+#             logo_file.save(full_path)
+
+#             #  UI-FRIENDLY PATH (RELATIVE URL)
+#             logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
+
+#             master_cursor.execute(
+#                 """
+#                 UPDATE companies
+#                 SET company_logo=%s
+#                 WHERE id=%s
+#             """,
+#                 (logo_path, company_id),
+#             )
+
+#             master.commit()
+
+#         # create company database
+#         master_cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{company_db_name}`")
+#         master.commit()
+
+#         master_cursor.close()
+#         master.close()
+
+#         # ==================================================
+#         # CREATE COMPANY TABLES
+#         # ==================================================
+#         company_conn = mysql.connector.connect(
+#             host=MASTER_DB_HOST,
+#             user=MASTER_DB_USER,
+#             password=MASTER_DB_PASS,
+#             database=company_db_name,
+#         )
+#         c = company_conn.cursor()
+
+#         # ---------------- USER ROLES ----------------
+#         c.execute(
+#             f"""
+# CREATE TABLE IF NOT EXISTS user_roles (
+#     id INT AUTO_INCREMENT PRIMARY KEY,
+#     role_name VARCHAR(50) NOT NULL,
+#     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+# )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+# """
+#         )
+
+#         # Default roles
+#         c.execute(
+#             """
+#         INSERT IGNORE INTO user_roles (id, role_name)
+#         VALUES
+#         (1, 'companyadmin'),
+#         (2, 'user')
+# """
+#         )
+
+#         # Insert default Admin role
+#         # ---------------- USERS (COMPANY DB) ----------------
+#         c.execute(
+#             f"""
+#         CREATE TABLE IF NOT EXISTS users (
+#     id INT AUTO_INCREMENT PRIMARY KEY,
+
+#     user_id VARCHAR(50) UNIQUE,
+#     full_name VARCHAR(100) NOT NULL,
+#     email VARCHAR(100) UNIQUE NOT NULL,
+#     phone_number VARCHAR(20),
+#     address VARCHAR(255),
+#     password_hash VARCHAR(255) NOT NULL,
+
+#     app_role_id INT NOT NULL,
+#     company_id INT NOT NULL,
+
+#     session_id VARCHAR(36),
+
+#     created_by VARCHAR(50),
+#     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+#     updated_by VARCHAR(50),
+#     updated_at DATETIME DEFAULT NULL,
+#     is_active TINYINT DEFAULT 1,
+#     is_deleted TINYINT DEFAULT 0,
+#     deleted_by VARCHAR(50),
+#     deleted_at TIMESTAMP NULL
+   
+# )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+# """
+#         )
+
+#         # ---------------- UPLOADED FILES ----------------
+#         c.execute(
+#             f"""
+#     CREATE TABLE IF NOT EXISTS uploaded_files (
+#         id INT AUTO_INCREMENT PRIMARY KEY,
+#         session_id VARCHAR(100),
+#         file_name VARCHAR(255),
+#         table_name VARCHAR(255),
+#         file_size_mb varchar(100),
+#         file_type VARCHAR(20),
+
+#         actual_rows INT,
+#         actual_columns INT,
+#         total_rows INT,
+#         total_columns INT,
+#         last_inserted_rows INT DEFAULT 0,
+
+#         created_by VARCHAR(100),
+#         updated_by VARCHAR(100),
+
+#         insights LONGTEXT,
+
+#         table_extraction_status VARCHAR(20),
+#         column_extraction_status VARCHAR(20),
+#         data_insights_status VARCHAR(20),
+#         data_insert_status VARCHAR(20),
+
+#         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#         updated_at TIMESTAMP NULL
+#     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+#     """
+#         )
+
+#         # ---------------- QUERY HISTORY ----------------
+#         c.execute(
+#             f"""
+#     CREATE TABLE IF NOT EXISTS query_history (
+#            id INT AUTO_INCREMENT PRIMARY KEY,
+
+#             session_id VARCHAR(100) NOT NULL,
+#             created_by VARCHAR(100) NOT NULL,
+
+#             query_title VARCHAR(150),
+#             message_query_id BIGINT,          
+
+#             user_query TEXT,
+#             ai_response LONGTEXT,
+#             executable_sql LONGTEXT,
+#             table_names JSON,
+
+#             is_execute TINYINT DEFAULT 0,
+#             is_success TINYINT DEFAULT 0,
+#             row_count INT DEFAULT 0,
+#             query_time VARCHAR(50),
+
+#             mode VARCHAR(20),                 
+#             version_no INT DEFAULT 1,
+#             parent_query_id INT NULL,
+#             is_latest TINYINT DEFAULT 1,
+
+#             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#             updated_at TIMESTAMP NULL,
+#             updated_by VARCHAR(100) NULL
+#         )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+#         """
+#         )
+
+#         # ---------------- SAVED REPORTS ----------------
+#         c.execute(
+#             f"""
+#     CREATE TABLE IF NOT EXISTS saved_reports (
+#         id INT AUTO_INCREMENT PRIMARY KEY,
+#         report_id VARCHAR(100),
+#         report_name VARCHAR(255),
+#         query_history_id INT,
+#         row_affected INT,
+#         report_config JSON,
+#         user_id VARCHAR(100),
+#         session_id VARCHAR(100),
+
+#         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#         updated_at TIMESTAMP NULL
+#     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+#     """
+#         )
+
+#         # ---------------- upload progress----------------
+#         c.execute(
+#             f"""     
+#         CREATE TABLE upload_progress (
+#         id INT AUTO_INCREMENT PRIMARY KEY,
+#         session_id VARCHAR(100),
+#         file_name VARCHAR(255),
+#         file_hash CHAR(32),
+#         processed_rows BIGINT DEFAULT 0,
+#         total_rows BIGINT DEFAULT 0,
+#         status VARCHAR(20),
+#         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#         UNIQUE KEY uq_progress_hash (file_hash)
+#     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+#     """
+#         )
+#         company_conn.commit()
+#         c.close()
+#         company_conn.close()
+
+#         # CREATE STORED PROCEDURES
+#         create_stored_procedures(company_db_name)
+#         # =============================
+#         # SEND COMPANY REGISTER MAIL
+#         # =============================
+#         company_data = {
+#             "company_name": company_name,
+#             "company_code": company_code,
+#             "company_email": company_email,
+#             "phone_number": phone_number,
+#             "subscription_type": subscription_type,
+#             "from_date": from_date,
+#             "to_date": to_date
+#         }
+
+#         subject, html_body = company_registered_email(company_data)
+
+#         send_email(
+#             to_email=company_email,   #  company er email
+#             subject=subject,
+#             html_body=html_body
+#         )
+
+#         return build_response(
+#             True,
+#             "Company registered successfully",
+#             200,
+#             extra={"company_db": company_db_name},
+#         )
+
+#     except Exception as e:
+#         return build_response(False, "Server error", 500, data={"error": str(e)})
+
+
 def admin_company_register_controller():
     try:
-        #  FORM DATA
-        company_id = request.form.get("id")
-        company_id = int(company_id) if company_id else None
-        company_name = request.form.get("company_name")
-        company_email = request.form.get("company_email")
-        phone_number = request.form.get("phone_number")
-        address = request.form.get("address")
-        subscription_type = request.form.get("subscription_type")
-        from_date = request.form.get("from_date")
-        to_date = request.form.get("to_date")
-        logo_file = request.files.get("company_logo")
-        created_by = request.form.get("created_by")
+        # JSON Payload theke data neowa hocche
+        if not request.is_json:
+            return build_response(False, "Content-Type must be application/json", 415)
+            
+        data = request.get_json()
+        if not data:
+            return build_response(False, "No JSON data provided", 400)
 
-        if not company_name or not company_email or not phone_number:
-            return build_response(False, "Required fields missing", 400)
+        # Apnar Payload onujayi data map kora (Baki gulo NULL thakbe)
+        company_name = data.get("company_name")
+        company_email = data.get("company_email")
+        gst_number = data.get("gst_number")
+        phone_number = data.get("phone_number")
+        dial_code=data.get("dial_code")
+        address = data.get("address")
+        city = data.get("city")
+        country = data.get("country")
+        pin_code = data.get("pin_code")
+        from_date = data.get("from_date")
+        to_date = data.get("to_date")
+        subscription_amount = data.get("subscription_amount")
         
-        
-        # ==================================================
-        # UPDATE COMPANY (ONLY IF company_id EXISTS)
-        # ==================================================
-        if company_id:
-            master = get_master_db()
-            master_cursor = master.cursor(dictionary=True)
+        # Optional field (jodi dorkar hoy, na thakle default null)
+        company_id = data.get("id")
+        created_by = data.get("created_by")
 
-            master_cursor.execute("""
-                UPDATE companies
-                SET
-                    company_name=%s,
-                    company_email=%s,
-                    phone_number=%s,
-                    address=%s,
-                    subscription_type=%s,
-                    from_date=%s,
-                    to_date=%s,
-                    updated_at=NOW()
-                WHERE id=%s
-                AND is_deleted=0
-            """, (
-                company_name,
-                company_email,
-                phone_number,
-                address,
-                subscription_type,
-                from_date,
-                to_date,
-                company_id
-            ))
-
-            if master_cursor.rowcount == 0:
-                master.close()
-                return build_response(False, "Company not found", 404)
-
-            #  OPTIONAL LOGO UPDATE
-            if logo_file:
-                if not allowed_logo(logo_file.filename):
-                    return build_response(False, "Only PNG/JPEG allowed", 400)     
-                if len(logo_file.read()) > MAX_LOGO_SIZE:
-                    return build_response(False, "Logo must be < 2MB", 400)
-                logo_file.seek(0)  # VERY IMPORTANT
-                master_cursor.execute(
-                    "SELECT company_db_name FROM companies WHERE id=%s",
-                    (company_id,)
-                )
-                row = master_cursor.fetchone()
-                company_db_name = row["company_db_name"]
-
-                company_folder = os.path.join(
-                    UPLOAD_FOLDER, "companies", company_db_name, "logo"
-                )
-                os.makedirs(company_folder, exist_ok=True)
-
-                ext = secure_filename(logo_file.filename).rsplit(".", 1)[1].lower()
-                filename = f"logo.{ext}"
-
-                full_path = os.path.join(company_folder, filename)
-                logo_file.save(full_path)
-
-                logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
-
-                master_cursor.execute("""
-                    UPDATE companies
-                    SET company_logo=%s
-                    WHERE id=%s
-                """, (logo_path, company_id))
-
-            master.commit()
-            master.close()
-
-            return build_response(
-                True,
-                "Company updated successfully",
-                200
-            )
-
-        
-        
-
-        #  LOGO VALIDATION
-        logo_path = None
-        if logo_file:
-            if not allowed_logo(logo_file.filename):
-                return build_response(False, "Only PNG/JPEG allowed", 400)
-
-            if len(logo_file.read()) > MAX_LOGO_SIZE:
-                return build_response(False, "Logo must be < 2MB", 400)
-
-            logo_file.seek(0)  # VERY IMPORTANT
+        # Mandatory Field Validation
+        if not company_name or not company_email:
+            return build_response(False, "Company name and email are required", 400)
 
         master = get_master_db()
         master_cursor = master.cursor(dictionary=True)
-        # compute company code
+
+        # ==================================================
+        # UPDATE LOGIC
+        # ==================================================
+        if company_id:
+            master_cursor.execute("""
+                UPDATE companies
+                SET
+                    company_name=%s, gst_number=%s, company_email=%s, phone_number=%s,dial_code=%s,
+                    address=%s, city=%s, country=%s, pin_code=%s,
+                    subscription_amount=%s, from_date=%s, to_date=%s, updated_at=NOW()
+                WHERE id=%s AND is_deleted=0
+            """, (
+                company_name, gst_number, company_email, phone_number,dial_code,
+                address, city, country, pin_code,
+                subscription_amount, from_date, to_date, company_id
+            ))
+            master.commit()
+            master.close()
+            return build_response(True, "Company updated successfully", 200)
+
+        # ==================================================
+        # INSERT LOGIC
+        # ==================================================
         company_code = generate_company_code(company_name, master_cursor)
         company_db_name = f"sahaj_cmp_{company_code}"
+
         try:
-            # insert company
             master_cursor.execute("""
-                INSERT INTO companies
-                (
-                    company_name,
-                    company_code,
-                    company_email,
-                    phone_number,
-                    address,
-                    subscription_type,
-                    from_date,
-                    to_date,
-                    company_db_name,
-                    created_by,
-                    is_active,
-                    is_deleted,
-                    created_at
+                INSERT INTO companies (
+                    company_name, gst_number, company_code, company_email,
+                    phone_number, dial_code ,address, city, country, pin_code,
+                    subscription_amount, from_date, to_date,
+                    company_db_name, created_by, is_active, is_deleted, created_at
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, 0, NOW())
             """, (
-                company_name,
-                company_code,
-                company_email,
-                phone_number,
-                address,
-                subscription_type,
-                from_date,
-                to_date,
-                company_db_name,
-                created_by
+                company_name, gst_number, company_code, company_email,
+                phone_number,dial_code, address, city, country, pin_code,
+                subscription_amount, from_date, to_date,
+                company_db_name, created_by
             ))
             master.commit()
             company_id = master_cursor.lastrowid
         except mysql.connector.IntegrityError:
             master.rollback()
-            return build_response(
-                False, "Company already exists. Please retry with some other.", 409
-            )
-        #  SAVE LOGO
-        if logo_file:
-            company_folder = os.path.join(
-                UPLOAD_FOLDER, "companies", company_db_name, "logo"
-            )
-            os.makedirs(company_folder, exist_ok=True)
+            return build_response(False, "Company or Email already exists", 409)
 
-            ext = secure_filename(logo_file.filename).rsplit(".", 1)[1].lower()
-            filename = f"logo.{ext}"
-
-            full_path = os.path.join(company_folder, filename)
-            logo_file.save(full_path)
-
-            #  UI-FRIENDLY PATH (RELATIVE URL)
-            logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
-
-            master_cursor.execute(
-                """
-                UPDATE companies
-                SET company_logo=%s
-                WHERE id=%s
-            """,
-                (logo_path, company_id),
-            )
-
-            master.commit()
-
-        # create company database
+        # Company Database creation
         master_cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{company_db_name}`")
         master.commit()
-
         master_cursor.close()
         master.close()
 
         # ==================================================
-        # CREATE COMPANY TABLES
+        # CREATE COMPANY TABLES (Inside New DB)
         # ==================================================
         company_conn = mysql.connector.connect(
             host=MASTER_DB_HOST,
@@ -1063,11 +1356,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
     user_id VARCHAR(50) UNIQUE,
     full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    email VARCHAR(100),
     phone_number VARCHAR(20),
     address VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
-
+    plain_password VARCHAR(100),
     app_role_id INT NOT NULL,
     company_id INT NOT NULL,
 
@@ -1193,35 +1486,56 @@ CREATE TABLE IF NOT EXISTS user_roles (
         c.close()
         company_conn.close()
 
-        # CREATE STORED PROCEDURES
+        # Stored Procedures
         create_stored_procedures(company_db_name)
-        # =============================
-        # SEND COMPANY REGISTER MAIL
-        # =============================
-        company_data = {
-            "company_name": company_name,
-            "company_code": company_code,
-            "company_email": company_email,
-            "phone_number": phone_number,
-            "subscription_type": subscription_type,
-            "from_date": from_date,
-            "to_date": to_date
-        }
 
-        subject, html_body = company_registered_email(company_data)
+        # Send Mail
+        # company_data = {
+        #     "company_name": company_name,
+        #     "company_code": company_code,
+        #     "company_email": company_email,
+        #     "phone_number": phone_number,
+        #     "subscription_type": subscription_type,
+        #     "from_date": from_date,
+        #     "to_date": to_date
+        # }
+        # subject, html_body = company_registered_email(company_data)
+        # send_email(to_email=company_email, subject=subject, html_body=html_body)
 
-        send_email(
-            to_email=company_email,   #  company er email
-            subject=subject,
-            html_body=html_body
-        )
+        return build_response(True, "Company registered successfully", 200, extra={"company_db": company_db_name})
 
-        return build_response(
-            True,
-            "Company registered successfully",
-            200,
-            extra={"company_db": company_db_name},
-        )
+    except Exception as e:
+        return build_response(False, "Server error", 500, data={"error": str(e)})
+
+# controller file-e get_country_options function-ti thik korun
+def get_country_options():
+    try:
+        master = get_master_db()
+        # buffered=True use kora hoyeche jate result set clean thake
+        cursor = master.cursor(dictionary=True, buffered=True)
+
+        # Sob country select kora hochche
+        query = "SELECT country_name, country_code, dial_code FROM countries ORDER BY country_name ASC"
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        cursor.close()
+        master.close()
+
+        # Data-ke object list hisabe format kora
+        country_list = [
+            {
+                "label": row["country_name"],
+                "value": row["country_code"],
+                "dialCode": row["dial_code"]
+            }
+            for row in rows
+        ]
+
+        if country_list:
+            return build_response(True, "Country list fetched successfully", 200, data=country_list)
+        else:
+            return build_response(False, "No countries found in database", 404)
 
     except Exception as e:
         return build_response(False, "Server error", 500, data={"error": str(e)})

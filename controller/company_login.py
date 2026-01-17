@@ -15,24 +15,32 @@ def company_login_controller():
         return build_response(False, "company_code, email & password required", 400)
 
     master = get_master_db()
-    cur = master.cursor(dictionary=True)
+    cur = master.cursor(dictionary=True,buffered=True)
 
     cur.execute(
         """
-     SELECT 
-    id,
-    company_name,
-    company_code,
-    company_email,
-    address,
-    subscription_type,
-    from_date,
-    to_date,
-    company_db_name,
-    phone_number,
-    company_logo
-    FROM companies
-    WHERE company_code=%s AND is_active=1
+   SELECT 
+    c.id,
+    c.company_name,
+    c.company_code,
+    c.company_email,
+    c.address,
+    c.subscription_type,
+    c.from_date,
+    c.to_date,
+    c.company_db_name,
+    c.phone_number,
+    c.company_logo,
+    c.city,
+    c.country AS country_code,
+    co.country_name,
+    c.pin_code
+FROM companies c
+LEFT JOIN countries co 
+    ON co.country_code = c.country
+WHERE c.company_code = %s
+  AND c.is_active = 1
+
     """,
         (company_code,),
     )
@@ -40,33 +48,35 @@ def company_login_controller():
 
     if not company:
         return build_response(False, "Company not found", 404)
-
+    cur.close()
     company_db = get_company_db(company["company_db_name"])
     ccur = company_db.cursor(dictionary=True)
 
     ccur.execute(
         """
-        SELECT u.user_id, u.password_hash, u.session_id, ur.role_name, u.full_name,
+        SELECT u.user_id, u.password_hash, u.plain_password,u.session_id, ur.role_name, u.full_name,
         u.email
         FROM users u
         JOIN user_roles ur ON ur.id = u.app_role_id
-        WHERE u.email=%s
+        WHERE u.user_id=%s AND u.plain_password=%s
     """,
-        (email,),
+        (email,password),
     )
     user = ccur.fetchone()
 
     if not user:
-        return build_response(False, "Invalid credentials", 401)
+        return build_response(False, "Invalid credentialss", 401)
 
-    if not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
-        return build_response(False, "Invalid credentials", 401)
+    # if not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
+    #     return build_response(False, "Invalid credentials", 401)
 
     session_id = user["session_id"] or str(uuid.uuid4())
     ccur.execute(
         "UPDATE users SET session_id=%s WHERE user_id=%s", (session_id, user["user_id"])
     )
     company_db.commit()
+    ccur.close()          # 🔥 REQUIRED
+    company_db.close() 
     # ADD THIS BLOCK (AFTER company_db.commit())
 
     mcur = master.cursor()
@@ -84,7 +94,7 @@ def company_login_controller():
     ))
     master.commit()
     mcur.close()
-
+    master.close()
     # ---- build full logo url for PDF ----
     base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
     logo_path = company["company_logo"]        # /uploads/companies/...
@@ -113,10 +123,13 @@ def company_login_controller():
             "company_email": company["company_email"],
             "company_address": company["address"],
             "company_logo": company["company_logo"],
-             "company_logo_url": company_logo_url,
+            "company_logo_url": company_logo_url,
             "company_phone": company["phone_number"],
             "subscription_type": company["subscription_type"],
             "subscription_from": str(company["from_date"]),
             "subscription_to": str(company["to_date"]),
+            "city":company["city"],
+            "country":company["country_name"],
+            "pin_code":company["pin_code"]
         },
     )

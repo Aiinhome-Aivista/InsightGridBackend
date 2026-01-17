@@ -32,18 +32,16 @@ def get_all_company_admins_controller():
                     SELECT
                         id,
                         user_id,
-                        full_name,
-                        email,
-                        phone_number,
-                        address,
+                        plain_password,
                         created_at
                     FROM users
                     WHERE app_role_id = (
-                        SELECT id FROM user_roles WHERE role_name = 'companyadmin'
+                        SELECT id FROM user_roles WHERE role_name = 'user'
                     )
+                    AND company_id = %s
                     AND is_deleted = 0
                     LIMIT 1
-                """)
+                """, (c["company_id"],))
 
                 admin = ccur.fetchone()
 
@@ -55,11 +53,9 @@ def get_all_company_admins_controller():
                         "company_db": c["company_db_name"],
 
                         "admin_user_id": admin["user_id"],
-                        "admin_name": admin["full_name"],
-                        "admin_email": admin["email"],
+                        "admin_name": admin["user_id"],      # user_id == admin_name
+                        "plain_password": admin["plain_password"],  # 👈 UI will show this
                         "created_at": admin["created_at"],
-                        "phone_number": admin["phone_number"],
-                        "address": admin["address"],
                         "id": admin["id"]
                     })
 
