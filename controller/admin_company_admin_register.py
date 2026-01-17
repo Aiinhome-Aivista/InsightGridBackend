@@ -166,7 +166,7 @@ def admin_company_admin_register_controller():
                 admin_user_id
             ))
             company_conn.commit()
-            return build_response(True, "Company Admin updated successfully", 200)
+            return build_response(True, "Company User updated successfully", 200)
 
 
 
@@ -175,19 +175,19 @@ def admin_company_admin_register_controller():
         # STEP 5.5: CHECK IF COMPANY ADMIN ALREADY EXISTS
         # (One Company → One CompanyAdmin rule)
         # ==================================================
-        company_cursor.execute(
-            """
-            SELECT id
-            FROM users
-            WHERE app_role_id = %s AND company_id = %s AND is_deleted = 0
-        """,
-            (company_admin_role_id,company_id),
-        )
+        # company_cursor.execute(
+        #     """
+        #     SELECT id
+        #     FROM users
+        #     WHERE app_role_id = %s AND company_id = %s AND is_deleted = 0
+        # """,
+        #     (company_admin_role_id,company_id),
+        # )
 
-        if company_cursor.fetchone():
-            return build_response(
-                False, "companyadmin already exists for this company", 400
-            )
+        # if company_cursor.fetchone():
+        #     return build_response(
+        #         False, "companyadmin already exists for this company", 400
+        #     )
 
         # ==================================================
         # STEP 6: CHECK DUPLICATE ADMIN EMAIL (company DB)
@@ -201,7 +201,7 @@ def admin_company_admin_register_controller():
 
         if company_cursor.fetchone():
             return build_response(
-                False, "This admin name already exists", 400
+                False, "This user name already exists", 400
             )
 
         # ==================================================
@@ -289,7 +289,7 @@ def admin_company_admin_register_controller():
         # send_email(admin_email, subject_a, html_a)
         return build_response(
             True,
-            "Company Admin registered successfully",
+            "Company User registered successfully",
             200,
             extra={
                 "company_code": company_code,
