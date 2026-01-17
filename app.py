@@ -173,4 +173,4 @@ def contact():
 
 # Run the Flask Server
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3008, debug=True,use_reloader=False)
+    app.run(host="0.0.0.0", port=3008, debug=True,)
