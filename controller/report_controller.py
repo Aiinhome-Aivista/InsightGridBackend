@@ -182,7 +182,8 @@ def report_list_controller():
 
                 #  add full url for chart images
             if "chart_images" in report_config:
-                    base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
+                    base_url="https://aivista.co.in/sahajinsight/"
+                    # base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
                     for img in report_config["chart_images"]:
                         img["url"] = f"{base_url}{img['path']}"   
 
