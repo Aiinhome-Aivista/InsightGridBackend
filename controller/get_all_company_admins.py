@@ -40,12 +40,25 @@ def get_all_company_admins_controller():
                     )
                     AND company_id = %s
                     AND is_deleted = 0
-                    LIMIT 1
+                  
                 """, (c["company_id"],))
 
-                admin = ccur.fetchone()
+                admins = ccur.fetchall()
 
-                if admin:
+                # if admin:
+                #     result.append({
+                #         "company_id": c["company_id"],
+                #         "company_code": c["company_code"],
+                #         "company_name": c["company_name"],
+                #         "company_db": c["company_db_name"],
+
+                #         "admin_user_id": admin["user_id"],
+                #         "admin_name": admin["user_id"],      # user_id == admin_name
+                #         "plain_password": admin["plain_password"],  # UI will show this
+                #         "created_at": admin["created_at"],
+                #         "id": admin["id"]
+                #     })
+                for admin in admins:
                     result.append({
                         "company_id": c["company_id"],
                         "company_code": c["company_code"],
@@ -53,18 +66,17 @@ def get_all_company_admins_controller():
                         "company_db": c["company_db_name"],
 
                         "admin_user_id": admin["user_id"],
-                        "admin_name": admin["user_id"],      # user_id == admin_name
-                        "plain_password": admin["plain_password"],  # 👈 UI will show this
+                        "admin_name": admin["user_id"],
+                        "plain_password": admin["plain_password"],
                         "created_at": admin["created_at"],
                         "id": admin["id"]
                     })
-
                 ccur.close()
                 company_db.close()
 
             except Exception as inner_err:
                 #  If company DB missing / corrupted → skip safely
-                print(f"Skipping {c['company_db_name']} → {inner_err}")
+                # print(f"Skipping {c['company_db_name']} → {inner_err}")
                 continue
 
         mcur.close()
@@ -72,7 +84,7 @@ def get_all_company_admins_controller():
 
         return build_response(
             True,
-            "Company admin list fetched successfully",
+            "Company users list fetched successfully",
             200,
             data=result
         )

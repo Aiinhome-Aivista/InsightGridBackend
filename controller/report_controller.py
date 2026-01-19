@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 load_dotenv() 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-    
+BASE_URL = os.getenv("BASE_URL")
+ 
  
 
 def save_report_controller():
@@ -182,7 +183,7 @@ def report_list_controller():
 
                 #  add full url for chart images
             if "chart_images" in report_config:
-                    base_url="https://aivista.co.in/sahajinsight/"
+                    base_url = BASE_URL
                     # base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
                     for img in report_config["chart_images"]:
                         img["url"] = f"{base_url}{img['path']}"   

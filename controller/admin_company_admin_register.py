@@ -152,16 +152,31 @@ def admin_company_admin_register_controller():
 
         if admin_user_id:
             company_cursor.execute("""
+            SELECT id FROM users
+            WHERE user_id = %s
+            AND id != %s
+            AND is_deleted = 0
+        """, (admin_name, admin_user_id))
+
+            if company_cursor.fetchone():
+                return build_response(
+                    False,
+                    "This user name already exists",
+                    400
+                )
+            company_cursor.execute("""
                 UPDATE users
                 SET
                     user_id = %s,             
                     plain_password = %s,
+                    password_hash = %s,
                     updated_by = %s,
                     updated_at = NOW()
                 WHERE id = %s AND is_deleted = 0
             """, (
                 admin_name,
                 admin_password,
+                hashed_password,
                 created_by,
                 admin_user_id
             ))
@@ -175,19 +190,19 @@ def admin_company_admin_register_controller():
         # STEP 5.5: CHECK IF COMPANY ADMIN ALREADY EXISTS
         # (One Company → One CompanyAdmin rule)
         # ==================================================
-        company_cursor.execute(
-            """
-            SELECT id
-            FROM users
-            WHERE app_role_id = %s AND company_id = %s AND is_deleted = 0
-        """,
-            (company_admin_role_id,company_id),
-        )
+        # company_cursor.execute(
+        #     """
+        #     SELECT id
+        #     FROM users
+        #     WHERE app_role_id = %s AND company_id = %s AND is_deleted = 0
+        # """,
+        #     (company_admin_role_id,company_id),
+        # )
 
-        if company_cursor.fetchone():
-            return build_response(
-                False, "companyadmin already exists for this company", 400
-            )
+        # if company_cursor.fetchone():
+        #     return build_response(
+        #         False, "companyadmin already exists for this company", 400
+        #     )
 
         # ==================================================
         # STEP 6: CHECK DUPLICATE ADMIN EMAIL (company DB)
@@ -201,7 +216,7 @@ def admin_company_admin_register_controller():
 
         if company_cursor.fetchone():
             return build_response(
-                False, "This admin name already exists", 400
+                False, "This user name already exists", 400
             )
 
         # ==================================================

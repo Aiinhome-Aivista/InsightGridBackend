@@ -3,10 +3,11 @@ import os
 from werkzeug.utils import secure_filename
 from database.dbConnection import get_master_db
 from helper.helperFunctions import build_response, allowed_logo
-
+from dotenv import load_dotenv
+load_dotenv()
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER")
-
+BASE_URL = os.getenv("BASE_URL")
 
 def update_company_logo_controller():
     try:
@@ -53,7 +54,7 @@ def update_company_logo_controller():
         logo_file.save(full_path)
 
         logo_path = f"/uploads/companies/{company_db_name}/logo/{filename}"
-
+        logo_url = f"{BASE_URL}{logo_path}"
         cursor.execute(
             "UPDATE companies SET company_logo=%s, updated_at=NOW() WHERE id=%s",
             (logo_path, company_id)
@@ -67,7 +68,10 @@ def update_company_logo_controller():
             True,
             "Company logo updated successfully",
             200,
-            data={"company_logo": logo_path}
+            data={
+                "company_logo": logo_path,        # DB / internal use
+                "company_logo_url": logo_url      # UI / frontend use
+               }        
         )
 
     except Exception as e:

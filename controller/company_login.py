@@ -2,7 +2,10 @@ from flask import request
 import uuid, bcrypt
 from database.dbConnection import get_master_db, get_company_db
 from helper.helperFunctions import build_response
-
+import os
+from dotenv import load_dotenv
+load_dotenv()   
+BASE_URL = os.getenv("BASE_URL")
 
 def company_login_controller():
     data = request.get_json() or {}
@@ -96,7 +99,7 @@ WHERE c.company_code = %s
     mcur.close()
     master.close()
     # ---- build full logo url for PDF ----
-    base_url="https://aivista.co.in/sahajinsight/"
+    base_url=BASE_URL
     # base_url = request.host_url.rstrip("/")   # http://127.0.0.1:3008
     logo_path = company["company_logo"]        # /uploads/companies/...
 
