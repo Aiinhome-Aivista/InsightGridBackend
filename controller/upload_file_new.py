@@ -48,27 +48,61 @@ def remove_row_hash(rows):
     return clean
 
 
+# def normalize_date_columns(df: pd.DataFrame, schema: list):
+#     """
+#     Convert CSV date values to MySQL DATE format (YYYY-MM-DD)
+#     """
+#     date_cols = [
+#         c["column"]
+#         for c in schema
+#         if str(c.get("datatype", "")).upper() == "DATE"
+#     ]
+
+#     for col in date_cols:
+#         if col not in df.columns:
+#             continue
+
+#         df[col] = pd.to_datetime(
+#             df[col],
+#             errors="coerce",          # invalid → NaT
+#             infer_datetime_format=True
+#         ).dt.strftime("%Y-%m-%d")
+
+#         # NaT → None (important for MySQL)
+#         df[col] = df[col].where(pd.notnull(df[col]), None)
+
+#     return df
+
 def normalize_date_columns(df: pd.DataFrame, schema: list):
     """
-    Convert CSV date values to MySQL DATE format (YYYY-MM-DD)
+    Convert CSV date/datetime values to MySQL-safe formats
+    DATE      → YYYY-MM-DD
+    DATETIME  → YYYY-MM-DD HH:MM:SS
     """
-    date_cols = [
-        c["column"]
-        for c in schema
-        if str(c.get("datatype", "")).upper() == "DATE"
-    ]
+    for col_def in schema:
+        col = col_def.get("column")
+        dtype = str(col_def.get("datatype", "")).upper()
 
-    for col in date_cols:
         if col not in df.columns:
             continue
 
-        df[col] = pd.to_datetime(
-            df[col],
-            errors="coerce",          # invalid → NaT
-            infer_datetime_format=True
-        ).dt.strftime("%Y-%m-%d")
+        # DATE
+        if dtype == "DATE":
+            df[col] = pd.to_datetime(
+                df[col],
+                errors="coerce",
+                infer_datetime_format=True
+            ).dt.strftime("%Y-%m-%d")
 
-        # NaT → None (important for MySQL)
+        # DATETIME
+        elif dtype == "DATETIME":
+            df[col] = pd.to_datetime(
+                df[col],
+                errors="coerce",
+                infer_datetime_format=True
+            ).dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        # NaT → None (important)
         df[col] = df[col].where(pd.notnull(df[col]), None)
 
     return df
