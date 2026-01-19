@@ -1355,7 +1355,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
 
     user_id VARCHAR(50) UNIQUE,
-    full_name VARCHAR(100) NOT NULL,
+    full_name VARCHAR(100),
     email VARCHAR(100),
     phone_number VARCHAR(20),
     address VARCHAR(255),
