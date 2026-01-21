@@ -14,6 +14,12 @@ def attach_company_db():
         "/admin/company_register",
         "/admin/company/admin_register",
         "/admin/get_companies",
+        "/admin/create_seo"
+        "/admin/update_seo"
+        "/admin/delete_seo"
+        "/admin/get_seo_list",
+        "/admin/get_seo_by_path"
+     
     
     )
 

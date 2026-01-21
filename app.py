@@ -34,6 +34,7 @@ from controller.get_all_company_admins import get_all_company_admins_controller
 from controller.company_get_users import get_company_users_controller
 from controller.contact_handel import handle_contact_controller
 
+from controller.seo_api import create_seo_entry_controller,update_seo_entry_controller,delete_seo_entry_controller,get_seo_data_controller,get_seo_by_path_controller
 # app = Flask(__name__,
 #     static_url_path="/uploads",
 #     static_folder=os.getenv("UPLOAD_FOLDER"))
@@ -180,6 +181,28 @@ def country():
 @app.route("/admin/company/logo", methods=["POST"])
 def update_company_logo():
     return update_company_logo_controller()
+
+@app.route("/admin/create_seo", methods=["POST"])
+def create_seo_route():
+    return create_seo_entry_controller()
+
+@app.route("/admin/update_seo", methods=["POST"])
+def update_seo_route():
+    return update_seo_entry_controller()
+
+
+@app.route("/admin/delete_seo", methods=["POST"])
+def delete_seo_route():
+    return delete_seo_entry_controller()
+
+@app.route("/admin/get_seo_list", methods=["GET"])
+def get_seo_route():
+    return get_seo_data_controller()
+
+@app.route("/admin/get_seo_by_path", methods=["GET"])
+def get_seo_by_path_route():
+    return get_seo_by_path_controller()
+
 
 # Run the Flask Server
 if __name__ == "__main__":
