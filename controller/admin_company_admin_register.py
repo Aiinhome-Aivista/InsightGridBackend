@@ -6,11 +6,7 @@ import os
 from flask.cli import load_dotenv
 from database.dbConnection import get_master_db, get_company_db
 from helper.helperFunctions import build_response
-from helper.mailer import send_email
-from helper.email_templates import (
-    company_admin_created_company_mail,
-    company_admin_created_admin_mail,
-)
+
 
 load_dotenv()
 
@@ -282,26 +278,6 @@ def admin_company_admin_register_controller():
         )
 
         company_conn.commit()
-
-        # =============================
-        # SEND MAILS (ONLY ON CREATE)
-        # =============================
-        # login_url = os.getenv("COMPANY_ADMIN_LOGIN_URL")
-        # mail_data = {
-        #     "company_name": company_name,
-        #     "company_code": company_code,
-        #     "admin_name": admin_name,
-        #     "admin_password": admin_password,
-        #     "login_url": login_url,
-        # }
-
-        # # Mail to Company (info purpose)
-        # subject_c, html_c = company_admin_created_company_mail(mail_data)
-        # send_email(company_email, subject_c, html_c)
-
-        # # Mail to Company Admin (access info)
-        # subject_a, html_a = company_admin_created_admin_mail(mail_data)
-        # send_email(admin_email, subject_a, html_a)
         return build_response(
             True,
             "Company Admin registered successfully",

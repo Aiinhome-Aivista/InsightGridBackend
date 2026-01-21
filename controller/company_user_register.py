@@ -3,8 +3,7 @@ import uuid, bcrypt
 from dotenv import load_dotenv
 from database.dbConnection import get_master_db, get_company_db
 from helper.helperFunctions import build_response, generate_user_id
-from helper.mailer import send_email
-from helper.email_templates import company_user_created_mail
+
 import os
 load_dotenv()
 
@@ -154,22 +153,7 @@ def company_user_register_controller():
         ))
 
         company_db.commit()
-        # =============================
-        # SEND USER WELCOME MAIL (ADD)
-        # =============================
-        login_url = os.getenv("COMPANY_USER_LOGIN_URL")
-
-        mail_data = {
-            "company_name": company_name,   
-            "user_name": name,
-            "user_email": email,
-            "user_password": password,    
-            "login_url": login_url
-        }
-
-        subject_u, html_u = company_user_created_mail(mail_data)
-        send_email(email, subject_u, html_u)
-        
+       
         return build_response(
             True,
             "User created successfully",

@@ -1,6 +1,4 @@
 from flask import request, jsonify
-# 1. REMOVE: from database.config import MYSQL_CONFIG
-# 2. ADD: Import the actual connection function
 from database.dbConnection import get_master_db
 
 
@@ -44,36 +42,6 @@ def create_seo_entry_controller():
 
 
 # --- 2. GET (Read) ---
-# def get_seo_data_controller(seo_id=None):
-#     # FIX here as well
-#     conn = get_master_db()
-#     if conn is None:
-#         return jsonify({"error": "Database connection failed"}), 500
-
-
-#     try:
-#         cursor = conn.cursor() 
-#         if seo_id:
-#             query = "SELECT * FROM seo_metadata WHERE id = %s"
-#             cursor.execute(query, (seo_id,))
-#             result = cursor.fetchone()
-#             if not result:
-#                 return jsonify({"error": "Not found"}), 404
-#         else:
-#             query = "SELECT * FROM seo_metadata ORDER BY id DESC"
-#             cursor.execute(query)
-#             result = cursor.fetchall()
-#         return jsonify(result), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-#     finally:
-#         try:
-#             cursor.close()
-#             conn.close()
-#         except Exception:
-#             pass
-
-
 def get_seo_data_controller(seo_id=None):
     conn = get_master_db()
     if conn is None:
@@ -116,41 +84,6 @@ def get_seo_data_controller(seo_id=None):
 
 
 # --- 3. UPDATE ---
-# def update_seo_entry_controller(seo_id):
-#     data = request.get_json()
-#     keyword = data.get('target_keyword')
-#     title = data.get('seo_title')
-#     desc = data.get('meta_description')
-
-
-#     # FIX here as well
-#     conn = get_master_db()
-#     if conn is None:
-#         return jsonify({"error": "Database connection failed"}), 500
-
-
-#     try:
-#         cursor = conn.cursor()
-#         check_query = "SELECT id FROM seo_metadata WHERE id = %s"
-#         cursor.execute(check_query, (seo_id,))
-#         if not cursor.fetchone():
-#             return jsonify({"error": "SEO entry not found"}), 404
-
-
-#         query = "UPDATE seo_metadata SET target_keyword=%s, seo_title=%s, meta_description=%s WHERE id=%s"
-#         cursor.execute(query, (keyword, title, desc, seo_id))
-#         conn.commit()
-#         return jsonify({"success": True, "message": "Updated successfully"}), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-#     finally:
-#         try:
-#             cursor.close()
-#             conn.close()
-#         except Exception:
-#             pass
-
-
 def update_seo_entry_controller():
     data = request.get_json()
 
@@ -160,7 +93,7 @@ def update_seo_entry_controller():
     title = data.get("seo_title")
     desc = data.get("meta_description")
 
-    # 🔴 Validation
+    #  Validation
     if not seo_id:
         return jsonify({
             "isSuccess": False,
@@ -183,7 +116,7 @@ def update_seo_entry_controller():
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # 🔹 Check record exists
+        #  Check record exists
         cursor.execute(
             "SELECT id FROM seo_metadata WHERE id = %s",
             (seo_id,)
@@ -194,7 +127,7 @@ def update_seo_entry_controller():
                 "message": "SEO entry not found"
             }), 404
 
-        # 🔹 Update
+        #  Update
         cursor.execute(
             """
             UPDATE seo_metadata
@@ -227,32 +160,6 @@ def update_seo_entry_controller():
 
 
 # --- 4. DELETE ---
-# def delete_seo_entry_controller(seo_id):
-#     # FIX here as well
-#     conn = get_master_db()
-#     if conn is None:
-#         return jsonify({"error": "Database connection failed"}), 500
-
-
-#     try:
-#         cursor = conn.cursor()
-#         query = "DELETE FROM seo_metadata WHERE id = %s"
-#         cursor.execute(query, (seo_id,))
-#         conn.commit()
-#         if cursor.rowcount == 0:
-#             return jsonify({"error": "Entry not found"}), 404
-#         return jsonify({"success": True, "message": "Deleted successfully"}), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-#     finally:
-#         try:
-#             cursor.close()
-#             conn.close()
-#         except Exception:
-#             pass
-
-
-
 def delete_seo_entry_controller():
     data = request.get_json()
     seo_id = data.get("id")
@@ -273,7 +180,7 @@ def delete_seo_entry_controller():
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # 🔹 Check exists
+        #  Check exists
         cursor.execute(
             "SELECT id FROM seo_metadata WHERE id = %s",
             (seo_id,)
@@ -284,7 +191,7 @@ def delete_seo_entry_controller():
                 "message": "SEO entry not found"
             }), 404
 
-        # 🔹 Delete
+        #  Delete
         cursor.execute(
             "DELETE FROM seo_metadata WHERE id = %s",
             (seo_id,)
