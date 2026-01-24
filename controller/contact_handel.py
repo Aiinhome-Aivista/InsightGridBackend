@@ -124,6 +124,7 @@ def send_email(name, user_email, subject, message_body):
         print("SMTP Error:", e)
         return False
 
+
 def handle_contact_controller():
     data = request.get_json() or {}
 
