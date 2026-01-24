@@ -105,19 +105,19 @@ def send_email(name, user_email, subject, message_body):
     msg["Reply-To"] = user_email
 
     try:
-        # with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        #     server.login(SMTP_USER, SMTP_PASSWORD)
-        #     print("LOGIN SUCCESS")
-
-        #     server.send_message(
-        #         msg,
-        #         from_addr=SMTP_USER,
-        #         to_addrs=RECEIVER_EMAILS
-        #     )
-        with smtplib.SMTP(SMTP_SERVER, 587) as server:
-            server.starttls()
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
+            print("LOGIN SUCCESS")
+
+            server.send_message(
+                msg,
+                from_addr=SMTP_USER,
+                to_addrs=RECEIVER_EMAILS
+            )
+        # with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        #     server.starttls()
+        #     server.login(SMTP_USER, SMTP_PASSWORD)
+        #     server.send_message(msg)
         return True
 
     except Exception as e:
