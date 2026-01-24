@@ -242,7 +242,7 @@ END
         IN p_created_by VARCHAR(50)
     )
     BEGIN
-            -- TOTAL FILE UPLOADS
+              -- TOTAL FILE UPLOADS
         SELECT 
             COUNT(*) AS total_uploaded_files
         FROM uploaded_files
@@ -250,7 +250,7 @@ END
         AND session_id = p_session_id
         AND table_extraction_status = 'done'
         AND column_extraction_status = 'done'
-        AND data_insights_status = 'done';
+        OR data_insights_status = 'done';
 
         -- TOTAL FILE EXTRACTED
         SELECT 
@@ -261,11 +261,11 @@ END
         AND table_extraction_status = 'done';
 
         -- TOTAL REPORTS GENERATED
-    SELECT 
-        COUNT(*) AS total_reports_generated
-    FROM saved_reports
-    WHERE user_id = p_created_by
-    AND session_id = p_session_id;
+        SELECT 
+            COUNT(*) AS total_reports_generated
+        FROM saved_reports
+        WHERE user_id = p_created_by
+        AND session_id = p_session_id;
 
         -- TOTAL QUERIES GENERATED
         SELECT 
@@ -293,6 +293,68 @@ END
         -- ORDER BY updated_at DESC
         ORDER BY  COALESCE(updated_at, created_at) DESC
         LIMIT 1;
+        -- AVG QUERY TIME
+        SELECT
+            ROUND(
+                AVG(
+                    CAST(
+                        REPLACE(query_time, ' sec', '') AS DECIMAL(10,3)
+                    )
+                ), 3
+            ) AS avg_query_time
+        FROM query_history
+        WHERE created_by = p_created_by
+        AND session_id = p_session_id
+        AND is_execute = 1
+        AND query_time IS NOT NULL
+        AND query_time != '';
+        -- QUERY SUCCESS RATE
+        SELECT
+            ROUND(
+                (SUM(is_success = 1) / COUNT(*)) * 100,
+                2
+            ) AS query_success_rate
+        FROM query_history
+        WHERE created_by = p_created_by
+        AND session_id = p_session_id;
+        -- AVG ROWS PER REPORT
+        SELECT
+            ROUND(AVG(row_affected), 0) AS avg_rows_per_report
+        FROM saved_reports
+        WHERE user_id = p_created_by
+        AND session_id = p_session_id;
+        -- FILE UPLOAD TREND
+        SELECT
+            DATE(created_at) AS upload_date,
+            COUNT(*) AS total_files
+        FROM uploaded_files
+        WHERE created_by = p_created_by
+        GROUP BY DATE(created_at)
+        ORDER BY upload_date;
+        -- QUERY ACTIVITY TREND
+        SELECT
+            DATE(created_at) AS query_date,
+            COUNT(*) AS total_queries
+        FROM query_history
+        WHERE created_by = p_created_by
+        GROUP BY DATE(created_at)
+        ORDER BY query_date;
+
+        -- TOP TABLES USED
+        SELECT
+            jt.table_name,
+            COUNT(*) AS usage_count
+        FROM query_history,
+        JSON_TABLE(
+            table_names,
+            '$[*]' COLUMNS (
+                table_name VARCHAR(100) PATH '$'
+            )
+        ) jt
+        WHERE created_by = p_created_by
+        GROUP BY jt.table_name
+        ORDER BY usage_count DESC
+        LIMIT 5;
     END
     """
     )
@@ -828,6 +890,50 @@ END
         END
     """
     )
+    
+    # ============================================================
+    # sp_save_or_update_report_schedule
+    # ============================================================
+    c.execute("DROP PROCEDURE IF EXISTS sp_save_or_update_report_schedule")
+    c.execute(
+        """
+    CREATE PROCEDURE sp_save_or_update_report_schedule(
+    IN p_report_id VARCHAR(255),
+    IN p_session_id VARCHAR(255),
+    IN p_user_id INT,
+    IN p_mail_title VARCHAR(255),
+    IN p_mail_body TEXT,
+    IN p_recipient_to JSON,
+    IN p_recipient_cc JSON,
+    IN p_schedule_time TIME,
+    IN p_frequency ENUM('daily', 'weekly', 'monthly', 'yearly', 'once'),
+    IN p_selected_days VARCHAR(255),
+    IN p_is_active BOOLEAN
+)
+BEGIN
+    INSERT INTO report_schedules (
+        report_id, user_session_id, mail_title, mail_body, 
+        recipient_to, recipient_cc, schedule_time, frequency, 
+        selected_days, is_active, created_by
+    )
+    VALUES (
+        p_report_id, p_session_id, p_mail_title, p_mail_body, 
+        p_recipient_to, p_recipient_cc, p_schedule_time, p_frequency, 
+        p_selected_days, p_is_active, p_user_id
+    )
+    ON DUPLICATE KEY UPDATE 
+        mail_title = p_mail_title,
+        mail_body = p_mail_body,
+        recipient_to = p_recipient_to,
+        recipient_cc = p_recipient_cc,
+        schedule_time = p_schedule_time,
+        frequency = p_frequency,
+        selected_days = p_selected_days,
+        is_active = p_is_active,
+        updated_at = CURRENT_TIMESTAMP;
+END
+ """
+    )
 
 
 def admin_company_register_controller():
@@ -1082,6 +1188,29 @@ CREATE TABLE IF NOT EXISTS user_roles (
         status VARCHAR(20),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_progress_hash (file_hash)
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+    """
+        )
+        
+          # ----------------report schedules ----------------
+        c.execute(
+            f"""     
+        CREATE TABLE report_schedules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_id VARCHAR(255) NOT NULL,
+    user_session_id VARCHAR(255),
+    mail_title VARCHAR(255) NOT NULL,
+    mail_body TEXT, 
+    recipient_to JSON NOT NULL,
+    recipient_cc JSON DEFAULT NULL,
+    schedule_time TIME NOT NULL,
+    frequency ENUM('daily', 'weekly', 'monthly', 'yearly', 'once') NOT NULL,
+    selected_days VARCHAR(255) DEFAULT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run DATETIME DEFAULT NULL,
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """
         )

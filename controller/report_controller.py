@@ -5,7 +5,8 @@ from database.dbConnection import get_db_connection
 from helper.helperFunctions import build_response,save_base64_image
 import os 
 from dotenv import load_dotenv
- 
+from helper.pdf_generator import generate_report_pdf
+
 # ---------- Load Environment Variables ----------
 load_dotenv() 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -221,3 +222,26 @@ def report_list_controller():
 
     except Exception as e:
         return build_response(False, "Server Error", 500, {"error": str(e)})
+
+
+
+def generate_report_pdf_controller():
+    payload = request.get_json() or {}
+    session_id = payload.get("session_id")
+
+    if not session_id:
+        return build_response(False, "session_id required", 400)
+
+    try:
+        filename = generate_report_pdf(session_id, payload, g.company_db)
+        
+        base_url = request.host_url.rstrip('/')
+        # সরাসরি পাথ লিখুন যেহেতু uploads/reportpdf ফিক্সড
+        download_url = f"{base_url}/uploads/reportpdf/{filename}"
+
+        return build_response(True, "PDF Generated Successfully", 200, {
+            "download_url": download_url,
+            "filename": filename
+        })
+    except Exception as e:
+        return build_response(False, str(e), 500)

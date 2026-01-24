@@ -71,7 +71,14 @@ def get_dashboard_data_controller():
                 result_sets[5][0]
                 if len(result_sets) > 5 and result_sets[5]
                 else None
-            )
+            ),
+            "avg_query_time": safe_get(result_sets[6], "avg_query_time"),
+            "query_success_rate": safe_get(result_sets[7], "query_success_rate"),
+            "avg_rows_per_report": safe_get(result_sets[8], "avg_rows_per_report"),
+            "file_upload_trend": result_sets[9] if len(result_sets) > 9 else [],
+            "query_activity_trend": result_sets[10] if len(result_sets) > 10 else [],
+            "top_tables_used": result_sets[11] if len(result_sets) > 11 else []
+
         }
 
         return build_response(True, "Dashboard data retrieved", 200, dashboard_data)

@@ -19,7 +19,7 @@ from controller.upload_file_new import (
     upload_and_insights_new_controller,
     get_upload_progress_controller as upload_progress_ctrl,
 )
-from controller.report_controller import save_report_controller, report_list_controller
+from controller.report_controller import save_report_controller, report_list_controller,generate_report_pdf_controller
 from controller.admin_company_register import admin_company_register_controller, get_country_options
 from controller.admin_company_admin_register import (
     admin_company_admin_register_controller,
@@ -35,6 +35,9 @@ from controller.company_get_users import get_company_users_controller
 from controller.contact_handel import handle_contact_controller
 
 from controller.seo_api import create_seo_entry_controller,update_seo_entry_controller,delete_seo_entry_controller,get_seo_data_controller,get_seo_by_path_controller
+from controller.save_report_schedule_controller import save_report_schedule_controller
+from scheduler_engine import start_report_scheduler
+
 # app = Flask(__name__,
 #     static_url_path="/uploads",
 #     static_folder=os.getenv("UPLOAD_FOLDER"))
@@ -203,7 +206,15 @@ def get_seo_route():
 def get_seo_by_path_route():
     return get_seo_by_path_controller()
 
+@app.route("/save_report_scheduler", methods=["POST"])
+def save_report_schedule():
+    return save_report_schedule_controller()
+
+@app.route("/generate_pdf", methods=["POST"])
+def generate_pdf_route():
+    return generate_report_pdf_controller()
 
 # Run the Flask Server
 if __name__ == "__main__":
+    start_report_scheduler()
     app.run(host="0.0.0.0", port=3008, debug=True,)
