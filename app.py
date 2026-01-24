@@ -203,6 +203,9 @@ def get_seo_route():
 def get_seo_by_path_route():
     return get_seo_by_path_controller()
 
+@app.route("/logo")
+def logo():
+    return send_from_directory("logo", "projectIcon.svg")
 
 # Run the Flask Server
 if __name__ == "__main__":
