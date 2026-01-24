@@ -205,7 +205,7 @@ def get_seo_by_path_route():
 
 @app.route("/logo")
 def logo():
-    return send_from_directory("logo", "projectIcon.svg")
+    return send_from_directory("logo", "projectIcon.png")
 
 
 # Run the Flask Server
