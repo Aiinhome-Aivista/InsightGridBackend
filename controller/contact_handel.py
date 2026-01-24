@@ -99,7 +99,7 @@ def send_email(name, user_email, subject, message_body):
     )
 
     msg = MIMEText(msg_content)
-    msg["Subject"] = f"New Contact Form: {subject}"
+    msg["Subject"] = f"Immediate {subject} from Sahajinsight"
     msg["From"] = SMTP_USER
     msg["To"] = ", ".join(RECEIVER_EMAILS)
     msg["Reply-To"] = user_email
