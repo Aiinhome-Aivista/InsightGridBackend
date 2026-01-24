@@ -207,6 +207,7 @@ def get_seo_by_path_route():
 def logo():
     return send_from_directory("logo", "projectIcon.svg")
 
+
 # Run the Flask Server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3008, debug=True,)
