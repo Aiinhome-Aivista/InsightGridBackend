@@ -47,6 +47,10 @@ remove_email_from_address_book_controller
 from controller.reportDropdown import (
 get_saved_reports_dropdown_controller
 )
+
+from controller.getReportSchedule import (
+get_report_schedules_controller
+)
 # app = Flask(__name__,
 #     static_url_path="/uploads",
 #     static_folder=os.getenv("UPLOAD_FOLDER"))
@@ -251,6 +255,11 @@ def address_book_remove_email_route():
 @app.route("/reports_dropdown", methods=["POST"])
 def reports_dropdown_route():
     return get_saved_reports_dropdown_controller()
+
+@app.route("/report_schedules_list", methods=["POST"])
+def report_schedules_list_route():
+    return get_report_schedules_controller()
+
 # Run the Flask Server
 if __name__ == "__main__":
     start_report_scheduler()
