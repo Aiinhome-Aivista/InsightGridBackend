@@ -935,8 +935,89 @@ BEGIN
 END
  """
     )
-
-
+    
+    # ============================================================
+    # sp_get_address_books
+    # ============================================================
+    c.execute("DROP PROCEDURE IF EXISTS sp_get_address_books")
+    c.execute(
+        """
+    CREATE PROCEDURE `sp_get_address_books`(
+    IN p_user_id INT
+    )
+    BEGIN
+        SELECT 
+            ab.id,
+            ab.name,
+            JSON_ARRAYAGG(abe.email) AS emails
+        FROM address_books ab
+        LEFT JOIN address_book_emails abe 
+            ON ab.id = abe.address_book_id
+        WHERE ab.created_by = p_user_id
+        AND ab.is_active = 1
+        GROUP BY ab.id;
+    END
+"""
+    )
+    
+    # ============================================================
+    # sp_create_address_book
+    # ============================================================
+    c.execute("DROP PROCEDURE IF EXISTS sp_create_address_book")
+    c.execute(
+        """
+    CREATE PROCEDURE `sp_create_address_book`(
+    IN p_name VARCHAR(255),
+    IN p_user_id INT
+    )
+    BEGIN
+        INSERT INTO address_books (name, created_by)
+        VALUES (p_name, p_user_id);
+    END    
+    """
+        )
+    
+    
+    # ============================================================
+    # sp_add_email_to_address_book
+    # ============================================================
+    c.execute("DROP PROCEDURE IF EXISTS sp_add_email_to_address_book")
+    c.execute(
+        """
+    CREATE  PROCEDURE `sp_add_email_to_address_book`(
+    IN p_address_book_id INT,
+    IN p_email VARCHAR(255)
+    )
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM address_book_emails
+            WHERE address_book_id = p_address_book_id
+            AND email = p_email
+        ) THEN
+            INSERT INTO address_book_emails (address_book_id, email)
+            VALUES (p_address_book_id, p_email);
+        END IF;
+    END
+    """
+        )
+       # ============================================================
+    # sp_remove_email_from_address_book
+    # ============================================================
+    c.execute("DROP PROCEDURE IF EXISTS sp_remove_email_from_address_book")
+    c.execute(
+        """
+    CREATE  PROCEDURE `sp_remove_email_from_address_book`(
+    IN p_address_book_id INT,
+    IN p_email VARCHAR(255)
+    )
+    BEGIN
+        DELETE FROM address_book_emails
+        WHERE address_book_id = p_address_book_id
+        AND email = p_email;
+    END
+        """
+            )
+   
 
 def admin_company_register_controller():
     try:
@@ -1215,7 +1296,38 @@ CREATE TABLE IF NOT EXISTS user_roles (
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """
-        )    
+        )
+        
+    # ----------------address books ----------------
+        c.execute(
+            f""" 
+            CREATE TABLE address_books (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_by INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+    """
+        )       
+        
+        
+    # ----------------address book emails ----------------
+        c.execute(
+            f""" 
+            CREATE TABLE address_book_emails (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    address_book_id INT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_address_book
+    FOREIGN KEY (address_book_id)
+    REFERENCES address_books(id)
+    ON DELETE CASCADE
+    )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
+    """
+        )       
+            
         
         company_conn.commit()
         c.close()

@@ -38,6 +38,15 @@ from controller.seo_api import create_seo_entry_controller,update_seo_entry_cont
 from controller.save_report_schedule_controller import save_report_schedule_controller
 from scheduler_engine import start_report_scheduler
 
+from controller.addressBook import (
+get_address_books_controller,
+create_address_book_controller,
+add_email_to_address_book_controller,
+remove_email_from_address_book_controller
+)
+from controller.reportDropdown import (
+get_saved_reports_dropdown_controller
+)
 # app = Flask(__name__,
 #     static_url_path="/uploads",
 #     static_folder=os.getenv("UPLOAD_FOLDER"))
@@ -218,6 +227,30 @@ def save_report_schedule():
 def generate_pdf_route():
     return generate_report_pdf_controller()
 
+# ===============================
+# ADDRESS BOOK ROUTES
+# ===============================
+
+
+@app.route("/address_book_list", methods=["POST"])
+def address_book_list_route():
+    return get_address_books_controller()
+
+@app.route("/address_book_create", methods=["POST"])
+def address_book_create_route():
+    return create_address_book_controller()
+
+@app.route("/address_book_email_add", methods=["POST"])
+def address_book_add_email_route():
+    return add_email_to_address_book_controller()
+
+@app.route("/address_book_email_remove", methods=["POST"])
+def address_book_remove_email_route():
+    return remove_email_from_address_book_controller()
+
+@app.route("/reports_dropdown", methods=["POST"])
+def reports_dropdown_route():
+    return get_saved_reports_dropdown_controller()
 # Run the Flask Server
 if __name__ == "__main__":
     start_report_scheduler()
