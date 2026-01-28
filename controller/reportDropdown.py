@@ -47,7 +47,7 @@ def get_saved_reports_dropdown_controller():
             FROM saved_reports
             WHERE user_id = %s
               AND session_id = %s
-            ORDER BY created_at DESC
+            ORDER BY report_name
         """, (created_by, session_id))
 
         reports = cursor.fetchall()

@@ -107,6 +107,7 @@ def create_address_book_controller():
 def add_email_to_address_book_controller():
     try:
         body = request.get_json() or {}
+
         address_book_id = body.get("address_book_id")
         email = body.get("email")
         created_by = body.get("created_by")
@@ -125,13 +126,29 @@ def add_email_to_address_book_controller():
             cursor.close()
             return build_response(False, "Invalid session", 401)
 
-        cursor.callproc(
-            "sp_add_email_to_address_book",
-            (address_book_id, email)
-        )
-        db.commit()
-        cursor.close()
+        try:
+            # ✅ NO OUT PARAM
+            cursor.callproc(
+                "sp_add_email_to_address_book",
+                (address_book_id, email)
+            )
+            db.commit()
 
+        except Exception as e:
+            db.rollback()
+
+            # ✅ DUPLICATE EMAIL (UNIQUE constraint)
+            if "1062" in str(e) or "Duplicate entry" in str(e):
+                cursor.close()
+                return build_response(
+                    False,
+                    "Email already exists in this address book",
+                    409
+                )
+
+            raise e
+
+        cursor.close()
         return build_response(True, "Email added successfully", 200)
 
     except Exception as e:
@@ -141,8 +158,6 @@ def add_email_to_address_book_controller():
             500,
             {"error": str(e)}
         )
-
-
 # ======================================================
 # 4️⃣ REMOVE EMAIL FROM ADDRESS BOOK
 # CALLS: sp_remove_email_from_address_book(p_address_book_id, p_email)
