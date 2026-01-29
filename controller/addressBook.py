@@ -15,7 +15,7 @@ def _validate_session(cursor, created_by, session_id):
 
 
 # ======================================================
-# 1️⃣ GET ADDRESS BOOKS
+# 1️ GET ADDRESS BOOKS
 # CALLS: sp_get_address_books(p_user_id)
 # ======================================================
 def get_address_books_controller():
@@ -62,7 +62,7 @@ def get_address_books_controller():
 
 
 # ======================================================
-# 2️⃣ CREATE ADDRESS BOOK
+#  CREATE ADDRESS BOOK
 # CALLS: sp_create_address_book(p_name, p_user_id)
 # ======================================================
 def create_address_book_controller():
@@ -101,7 +101,7 @@ def create_address_book_controller():
 
 
 # ======================================================
-# 3️⃣ ADD EMAIL TO ADDRESS BOOK
+#  ADD EMAIL TO ADDRESS BOOK
 # CALLS: sp_add_email_to_address_book(p_address_book_id, p_email)
 # ======================================================
 def add_email_to_address_book_controller():
@@ -127,7 +127,7 @@ def add_email_to_address_book_controller():
             return build_response(False, "Invalid session", 401)
 
         try:
-            # ✅ NO OUT PARAM
+            #NO OUT PARAM
             cursor.callproc(
                 "sp_add_email_to_address_book",
                 (address_book_id, email)
@@ -137,7 +137,7 @@ def add_email_to_address_book_controller():
         except Exception as e:
             db.rollback()
 
-            # ✅ DUPLICATE EMAIL (UNIQUE constraint)
+            # DUPLICATE EMAIL (UNIQUE constraint)
             if "1062" in str(e) or "Duplicate entry" in str(e):
                 cursor.close()
                 return build_response(
@@ -159,7 +159,7 @@ def add_email_to_address_book_controller():
             {"error": str(e)}
         )
 # ======================================================
-# 4️⃣ REMOVE EMAIL FROM ADDRESS BOOK
+#  REMOVE EMAIL FROM ADDRESS BOOK
 # CALLS: sp_remove_email_from_address_book(p_address_book_id, p_email)
 # ======================================================
 def remove_email_from_address_book_controller():

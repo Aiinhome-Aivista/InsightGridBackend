@@ -67,53 +67,8 @@ def build_report_payload(cur, schedule):
     return payload
 # -------------------------------------------------
 # MAIL SENDER
-# -------------------------------------------------
-# def send_automated_email(schedule, pdf_buffer, filename):
-#     try:
-#         sender_email = "sahajinsightssoluation@gmail.com"
-#         sender_password = "fjcy vars xpzq nuat"  # Gmail App Password
 
-#         msg = MIMEMultipart()
-#         msg["From"] = f"InsightGrid Reports <{sender_email}>"
-
-#         to_list = json.loads(schedule["recipient_to"])
-#         cc_list = json.loads(schedule.get("recipient_cc") or "[]")
-
-#         msg["To"] = ", ".join(to_list)
-#         if cc_list:
-#             msg["Cc"] = ", ".join(cc_list)
-
-#         msg["Subject"] = schedule["mail_title"]
-#         msg.attach(
-#             MIMEText(
-#                 schedule.get("mail_body") or "Please find the attached report.",
-#                 "plain"
-#             )
-#         )
-
-#         part = MIMEBase("application", "octet-stream")
-#         part.set_payload(pdf_buffer.read())
-#         encoders.encode_base64(part)
-#         part.add_header(
-#             "Content-Disposition",
-#             f"attachment; filename={filename}"
-#         )
-#         msg.attach(part)
-
-#         all_recipients = to_list + cc_list
-
-#         with smtplib.SMTP("smtp.gmail.com", 587) as server:
-#             server.starttls()
-#             server.login(sender_email, sender_password)
-#             server.sendmail(sender_email, all_recipients, msg.as_string())
-
-#         return True
-
-#     except Exception as e:
-#         print(" Mail Error:", e)
-#         return False
-
-def send_automated_email(schedule, pdf_buffer, filename, company_name):
+def send_automated_email(schedule, pdf_buffer, filename, company_name,report_name):
     try:
         sender_email = "sahajinsightssoluation@gmail.com"
         sender_password = "fjcy vars xpzq nuat"
@@ -165,8 +120,8 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name):
                           <td style="padding:8px;">{company_name}</td>
                         </tr>
                         <tr style="background:#fafafa;">
-                          <td style="padding:8px; font-weight:bold;">Report ID</td>
-                          <td style="padding:8px;">{schedule.get("report_id")}</td>
+                            <td style="padding:8px; font-weight:bold;">Report Name</td>
+                            <td style="padding:8px;">{report_name}</td>
                         </tr>
                         <tr>
                           <td style="padding:8px; font-weight:bold;">Generated On</td>
@@ -177,7 +132,6 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name):
                   </tr>
 
                   <tr><td style="height:20px;"></td></tr>
-
                   <tr>
                     <td style="font-size:13px; color:#555;">
                       This report is <b>system-generated</b> and does not require any manual action.
@@ -231,12 +185,24 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name):
         return True
 
     except Exception as e:
-        print("❌ Mail Error:", e)
+        print("Mail Error:", e)
         return False
+    
+def get_report_name_by_id(cur, report_id, session_id):
+    cur.execute("""
+        SELECT report_name
+        FROM saved_reports
+        WHERE report_id = %s
+          AND session_id = %s
+        LIMIT 1
+    """, (report_id, session_id))
+
+    row = cur.fetchone()
+    return row["report_name"] if row and row.get("report_name") else "Scheduled Report"    
 # -------------------------------------------------
 # PROCESS ONE COMPANY DB
 # -------------------------------------------------
-def process_company_schedules(company_db_name):
+def process_company_schedules(company_db_name,company_name):
     conn = get_company_db(company_db_name)
     cur = conn.cursor(dictionary=True)
 
@@ -256,7 +222,7 @@ def process_company_schedules(company_db_name):
     for schedule in schedules:
         try:
             # -------------------------------------------------
-            # 1️⃣ Schedule time handling
+            # 1 Schedule time handling
             # -------------------------------------------------
             schedule_time_raw = schedule["schedule_time"]
 
@@ -269,12 +235,12 @@ def process_company_schedules(company_db_name):
             scheduled_dt = datetime.combine(today, schedule_time)
             current_dt = datetime.combine(today, current_time)
 
-            # ⏱ tolerance (safe)
+            #  tolerance (safe)
             if abs((scheduled_dt - current_dt).total_seconds()) > 30:
                 continue
 
             # -------------------------------------------------
-            # 2️⃣ Duplicate protection (minute-level lock)
+            # 2 Duplicate protection (minute-level lock)
             # -------------------------------------------------
             if schedule["last_run"]:
                 last_run_min = schedule["last_run"].replace(second=0, microsecond=0)
@@ -282,7 +248,7 @@ def process_company_schedules(company_db_name):
                     continue
 
             # -------------------------------------------------
-            # 3️⃣ Frequency check
+            #Frequency check
             # -------------------------------------------------
             freq = schedule["frequency"].lower()
             selected_days = (schedule.get("selected_days") or "").split(",")
@@ -300,18 +266,17 @@ def process_company_schedules(company_db_name):
             if not should_send:
                 continue
 
-            print(
-                f"📄 Generating report {schedule['report_id']} "
-                f"for company DB {company_db_name}"
-            )
-
             # -------------------------------------------------
-            # 4️⃣ Build FINAL payload (saved_reports + query_history)
+            # Build FINAL payload (saved_reports + query_history)
             # -------------------------------------------------
             payload = build_report_payload(cur, schedule)
-
+            report_name = get_report_name_by_id(
+                cur,
+                schedule["report_id"],
+                schedule["user_session_id"]
+            )
             # -------------------------------------------------
-            # 5️⃣ Lock BEFORE heavy operations (important)
+            #Lock BEFORE heavy operations (important)
             # -------------------------------------------------
             cur.execute(
                 "UPDATE report_schedules SET last_run=%s WHERE id=%s",
@@ -320,7 +285,7 @@ def process_company_schedules(company_db_name):
             conn.commit()
 
             # -------------------------------------------------
-            # 6️⃣ Generate PDF
+            # Generate PDF
             # -------------------------------------------------
             filename = generate_report_pdf(
                 session_id=schedule["user_session_id"],
@@ -332,9 +297,9 @@ def process_company_schedules(company_db_name):
             pdf_buffer = open(pdf_path, "rb")
 
             # -------------------------------------------------
-            # 7️⃣ Send Mail
+            #  Send Mail
             # -------------------------------------------------
-            if send_automated_email(schedule, pdf_buffer, filename):
+            if send_automated_email(schedule, pdf_buffer, filename, company_name,report_name):
 
                 # once → deactivate
                 if freq == "once":
@@ -344,12 +309,12 @@ def process_company_schedules(company_db_name):
                     )
 
                 conn.commit()
-                print("✅ Mail sent successfully:", filename)
+                # print(" Mail sent successfully:", filename)
 
             pdf_buffer.close()
 
         except Exception as e:
-            print("❌ Schedule Error:", e)
+            print(" Schedule Error:", e)
 
     cur.close()
     conn.close()
@@ -365,7 +330,7 @@ def scheduler_job():
     m_cur = m_conn.cursor(dictionary=True)
 
     m_cur.execute("""
-        SELECT company_db_name, comapny_name
+        SELECT company_db_name, company_name
         FROM companies
         WHERE is_active = 1 AND is_deleted = 0
     """)
@@ -376,7 +341,7 @@ def scheduler_job():
 
     for comp in companies:
         try:
-            process_company_schedules(comp["company_db_name"])
+            process_company_schedules(comp["company_db_name"],comp["company_name"])
         except Exception as e:
             print(" Company Scheduler Error:", e)
 
@@ -396,4 +361,4 @@ def start_report_scheduler():
     )
 
     scheduler.start()
-    print(" Dynamic Report Scheduler Started")
+    # print(" Dynamic Report Scheduler Started")

@@ -46,8 +46,6 @@ def get_report_schedules_controller():
                 rs.report_id,
                 sr.report_name,
                 rs.schedule_name,
-                rs.mail_title,
-                rs.mail_body,
                 rs.recipient_to,
                 rs.recipient_cc,
                 rs.schedule_time,

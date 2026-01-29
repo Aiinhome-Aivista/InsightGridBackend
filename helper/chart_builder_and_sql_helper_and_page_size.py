@@ -163,7 +163,7 @@ def generate_backend_chart(chart_item):
                     showgrid=False
                 ),
 
-                # 👇 LINE chart starts from 0
+                #  LINE chart starts from 0
                 yaxis=dict(
                     range=[0, max_val * 1.15],
                     gridcolor="#E5E7EB",
@@ -188,102 +188,7 @@ def generate_backend_chart(chart_item):
         return None
 
 
-# def generate_backend_chart(chart_item):
-#     """
-#     Returns: BytesIO PNG image (for PDF)
-#     """
 
-#     try:
-#         chart_type = chart_item.get("type", "bar").lower()
-#         title = chart_item.get("customTitle", "")
-#         subtitle = chart_item.get("subtitle", "")
-#         style = chart_item.get("style", {})
-#         agg = chart_item.get("agg", "").lower()
-
-#         cols = chart_item.get("chart_column_details", [])
-#         if not cols:
-#             return None
-
-#         # -------- DATA (FROM DB PAYLOAD ONLY) --------
-#         if agg == "count":
-#             s = pd.Series(cols[0]["column_data"]).value_counts()
-#             df = pd.DataFrame({
-#                 "label": s.index.astype(str),
-#                 "value": s.values
-#             })
-#         else:
-#             if len(cols) < 2:
-#                 return None
-#             df = pd.DataFrame({
-#                 "label": [str(x) for x in cols[0]["column_data"]],
-#                 "value": cols[1]["column_data"]
-#             })
-
-#         # -------- CHART --------
-#         if chart_type == "pie":
-#             fig = px.pie(df, names="label", values="value", hole=0.55)
-#             fig.update_traces(
-#                 textinfo="percent",
-#                 marker=dict(line=dict(color="white", width=2))
-#             )
-
-#         elif chart_type == "line":
-#             fig = px.line(df, x="label", y="value", markers=True)
-#             fig.update_traces(
-#                 line=dict(color=style.get("lineColor", "#2563EB"), width=3),
-#                 marker=dict(size=7),
-#                 text=df["value"],
-#                 textposition="top center"
-#             )
-
-#         else:  # bar
-#             fig = px.bar(df, x="label", y="value")
-#             fig.update_traces(
-#                 marker=dict(color=style.get("barColor", "#93C5FD")),
-#                 width=0.45,
-#                 text=df["value"],
-#                 textposition="outside"
-#             )
-
-#         # -------- CARD STYLE --------
-#         fig.update_layout(
-#             paper_bgcolor="white",
-#             plot_bgcolor="white",
-#             height=420,
-#             margin=dict(l=40, r=40, t=90, b=40),
-#             title=dict(
-#                 text=title,
-#                 x=0,
-#                 xanchor="left",
-#                 font=dict(size=14, color="#111827")
-#             ),
-#             legend=dict(x=1.02, y=0.5)
-#         )
-
-#         if subtitle:
-#             fig.add_annotation(
-#                 text=subtitle,
-#                 x=0, y=1.08,
-#                 xref="paper", yref="paper",
-#                 showarrow=False,
-#                 font=dict(size=11, color="#6B7280")
-#             )
-
-#         # border
-#         fig.add_shape(
-#             type="rect",
-#             xref="paper", yref="paper",
-#             x0=0, y0=0, x1=1, y1=1,
-#             line=dict(color="#E5E7EB", width=1)
-#         )
-
-#         img = fig.to_image(format="png", scale=2)
-#         return BytesIO(img)
-
-#     except Exception as e:
-#         print("Chart error:", e)
-#         return None
-    
 def get_pagesize_by_columns(col_count):
     if col_count <= 8:
         return A4

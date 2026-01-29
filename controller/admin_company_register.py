@@ -902,8 +902,6 @@ END
     IN p_report_id VARCHAR(255),
     IN p_session_id VARCHAR(255),
     IN p_user_id INT,
-    IN p_mail_title VARCHAR(255),
-    IN p_mail_body TEXT,
     IN p_recipient_to JSON,
     IN p_recipient_cc JSON,
     IN p_schedule_time TIME,
@@ -913,18 +911,16 @@ END
 )
 BEGIN
     INSERT INTO report_schedules (
-        report_id, user_session_id, mail_title, mail_body, 
+        report_id, user_session_id,
         recipient_to, recipient_cc, schedule_time, frequency, 
         selected_days, is_active, created_by
     )
     VALUES (
-        p_report_id, p_session_id, p_mail_title, p_mail_body, 
+        p_report_id, p_session_id, 
         p_recipient_to, p_recipient_cc, p_schedule_time, p_frequency, 
         p_selected_days, p_is_active, p_user_id
     )
     ON DUPLICATE KEY UPDATE 
-        mail_title = p_mail_title,
-        mail_body = p_mail_body,
         recipient_to = p_recipient_to,
         recipient_cc = p_recipient_cc,
         schedule_time = p_schedule_time,
@@ -943,19 +939,22 @@ END
     c.execute(
         """
     CREATE PROCEDURE `sp_get_address_books`(
-    IN p_user_id INT
+    IN p_user_id VARCHAR(255)
     )
     BEGIN
-        SELECT 
-            ab.id,
-            ab.name,
-            JSON_ARRAYAGG(abe.email) AS emails
+       SELECT
+        ab.id,
+        ab.name,
+        CASE
+        WHEN COUNT(abe.email) = 0 THEN JSON_ARRAY()
+        ELSE JSON_ARRAYAGG(abe.email)
+        END AS emails
         FROM address_books ab
-        LEFT JOIN address_book_emails abe 
-            ON ab.id = abe.address_book_id
+        LEFT JOIN address_book_emails abe
+        ON ab.id = abe.address_book_id
         WHERE ab.created_by = p_user_id
         AND ab.is_active = 1
-        GROUP BY ab.id;
+        GROUP BY ab.id, ab.name;
     END
 """
     )
@@ -989,14 +988,12 @@ END
     IN p_email VARCHAR(255)
     )
     BEGIN
-        IF NOT EXISTS (
-            SELECT 1 FROM address_book_emails
-            WHERE address_book_id = p_address_book_id
-            AND email = p_email
-        ) THEN
-            INSERT INTO address_book_emails (address_book_id, email)
-            VALUES (p_address_book_id, p_email);
-        END IF;
+    -- normalize email
+    SET p_email = LOWER(TRIM(p_email));
+
+    -- direct insert
+    INSERT INTO address_book_emails (address_book_id, email)
+    VALUES (p_address_book_id, p_email);
     END
     """
         )
@@ -1282,8 +1279,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     report_id VARCHAR(255) NOT NULL,
     user_session_id VARCHAR(255),
-    mail_title VARCHAR(255) NOT NULL,
-    mail_body TEXT, 
+    schedule_name VARCHAR(255) NOT NULL,
     recipient_to JSON NOT NULL,
     recipient_cc JSON DEFAULT NULL,
     schedule_time TIME NOT NULL,
@@ -1304,7 +1300,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
             CREATE TABLE address_books (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    created_by INT NOT NULL,
+    created_by varchar(100) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
@@ -1320,15 +1316,14 @@ CREATE TABLE IF NOT EXISTS user_roles (
     address_book_id INT NOT NULL,
     email VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_book_email UNIQUE (address_book_id, email),
     CONSTRAINT fk_address_book
     FOREIGN KEY (address_book_id)
     REFERENCES address_books(id)
     ON DELETE CASCADE
     )ENGINE={DB_ENGINE} DEFAULT CHARSET={DB_CHARSET}
     """
-        )       
-            
-        
+        )
         company_conn.commit()
         c.close()
         company_conn.close()

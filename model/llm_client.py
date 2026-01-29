@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()  # loads variables from .env file
 
 # ---------- LLM Configuration ----------
-ACTIVE_LLM = os.getenv("ACTIVE_LLM", "mistral_cloud")              # "gemini", "mistral_cloud", "mistral_local"
+ACTIVE_LLM = os.getenv("ACTIVE_LLM", "gemini")              # "gemini", "mistral_cloud", "mistral_local"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1")            # for Gemini
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")

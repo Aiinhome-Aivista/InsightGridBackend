@@ -13,8 +13,8 @@ def save_report_schedule_controller():
         user_id = data.get("created_by")
 
         report_id = data.get("report_id")
-        mail_title = data.get("mail_title")
-        mail_body = data.get("mail_body")
+        # mail_title = data.get("mail_title")
+        # mail_body = data.get("mail_body")
         recipient_to = data.get("to")
         recipient_cc = data.get("cc", [])
         schedule_time = data.get("schedule_time")
@@ -23,7 +23,7 @@ def save_report_schedule_controller():
         is_active = data.get("is_active", True)
 
         # ✅ Required validation
-        if not all([session_id, user_id, report_id, mail_title, recipient_to, schedule_time, frequency]):
+        if not all([session_id, user_id, report_id, recipient_to, schedule_time, frequency]):
             return build_response(False, "Missing required scheduling fields", 400)
 
         # ✅ DB check
@@ -48,8 +48,8 @@ def save_report_schedule_controller():
             schedule_name,
             report_id,
             user_id,
-            mail_title,
-            mail_body,
+            " ",
+            " ",
             json.dumps(recipient_to),
             json.dumps(recipient_cc),
             schedule_time,
