@@ -11,7 +11,60 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from database.dbConnection import get_master_db, get_company_db
 from helper.pdf_generator import generate_report_pdf
 
+def build_report_payload(cur, schedule):
+    """
+    Build FINAL payload from:
+    1. saved_reports.report_config
+    2. query_history.executable_sql
+    """
 
+    # ---------- 1️⃣ saved_reports ----------
+    cur.execute("""
+        SELECT report_config
+        FROM saved_reports
+        WHERE report_id=%s
+          AND session_id=%s
+        LIMIT 1
+    """, (schedule["report_id"], schedule["user_session_id"]))
+
+    sr = cur.fetchone()
+    if not sr:
+        raise Exception("Saved report not found")
+
+    base_payload = (
+        sr["report_config"]
+        if isinstance(sr["report_config"], dict)
+        else json.loads(sr["report_config"])
+    )
+
+    # ---------- 2️⃣ query_history (LATEST SUCCESS QUERY) ----------
+    cur.execute("""
+        SELECT executable_sql, table_names
+        FROM query_history
+        WHERE session_id=%s
+          AND is_execute=1
+          AND is_success=1
+          AND is_latest=1
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, (schedule["user_session_id"],))
+
+    qh = cur.fetchone()
+    if not qh or not qh.get("executable_sql"):
+        raise Exception("Executable SQL not found in query_history")
+
+    # ---------- 3️⃣ FINAL PAYLOAD ----------
+    payload = {
+        "report_title": base_payload.get("report_title", "Scheduled Report"),
+        "query": qh["executable_sql"],          # 🔥 MOST IMPORTANT
+        "charts": base_payload.get("charts", []),
+        "filters": base_payload.get("filters", []),
+        "group_by": base_payload.get("group_by", []),
+        "selected_columns": base_payload.get("selected_columns", []),
+        "table_names": qh.get("table_names", [])
+    }
+
+    return payload
 # -------------------------------------------------
 # MAIL SENDER
 # -------------------------------------------------
@@ -64,6 +117,130 @@ def send_automated_email(schedule, pdf_buffer, filename):
 # -------------------------------------------------
 # PROCESS ONE COMPANY DB
 # -------------------------------------------------
+# def process_company_schedules(company_db_name):
+#     conn = get_company_db(company_db_name)
+#     cur = conn.cursor(dictionary=True)
+
+#     now = datetime.now()
+#     today = now.date()
+#     current_time = now.time().replace(second=0, microsecond=0)
+#     current_day = now.strftime("%A")  # Monday, Tuesday...
+
+#     cur.execute("""
+#         SELECT *
+#         FROM report_schedules
+#         WHERE is_active = 1
+#     """)
+#     schedules = cur.fetchall()
+
+#     for schedule in schedules:
+#         try:
+#             schedule_time_raw = schedule["schedule_time"]
+
+# # 🛠 MySQL TIME → python conversion fix
+#             if isinstance(schedule_time_raw, timedelta):
+#                 schedule_time = (
+#                 datetime.min + schedule_time_raw
+#                 ).time()
+#             else:
+#                 schedule_time = schedule_time_raw
+
+#             scheduled_dt = datetime.combine(today, schedule_time)
+#             current_dt = datetime.combine(today, current_time)
+
+# # ⏱ ±60 sec tolerance
+#             if abs((scheduled_dt - current_dt).total_seconds()) > 60:
+#                 continue
+
+
+#             #  duplicate protection
+#             if schedule["last_run"] and schedule["last_run"].date() == today:
+#                 continue
+
+#             freq = schedule["frequency"].lower()
+#             selected_days = (schedule.get("selected_days") or "").split(",")
+
+#             should_send = False
+
+#             if freq == "once":
+#                 should_send = True
+#             elif freq == "daily":
+#                 should_send = True
+#             elif freq == "weekly" and current_day in selected_days:
+#                 should_send = True
+#             elif freq == "monthly" and now.day == schedule["created_at"].day:
+#                 should_send = True
+#             elif freq == "yearly" and (
+#                 now.day == schedule["created_at"].day and
+#                 now.month == schedule["created_at"].month
+#             ):
+#                 should_send = True
+
+#             if not should_send:
+#                 continue
+
+#             print(
+#                 f" Generating report {schedule['report_id']} "
+#                 f"for company DB {company_db_name}"
+#             )
+
+#             # 1️ report payload আনো
+#             cur.execute("""
+#     SELECT report_config
+#     FROM saved_reports
+#     WHERE report_id=%s
+#       AND session_id=%s
+#     LIMIT 1
+#             """, (schedule["report_id"], schedule["user_session_id"]))
+
+#             row = cur.fetchone()
+#             if not row:
+#                 raise Exception("Report config not found")
+
+#             # payload = row["report_config"]
+#             # payload = (
+#             #     row["report_config"]
+#             #     if isinstance(row["report_config"], dict)
+#             #     else json.loads(row["report_config"])
+#             # )
+#             payload = build_report_payload(cur, schedule)
+
+
+# # 2️ PDF generate করো (CORRECT CALL)
+#             filename = generate_report_pdf(
+#                 session_id=schedule["user_session_id"],
+#                 payload=payload,
+#                 company_db=conn
+#             )
+
+# # generate_report_pdf returns filename only
+#             pdf_buffer = open(
+#                 os.path.join("uploads", "reportpdf", filename),
+#                 "rb"
+#             )
+
+
+#             if send_automated_email(schedule, pdf_buffer, filename):
+#                 cur.execute(
+#                     "UPDATE report_schedules SET last_run=%s WHERE id=%s",
+#                     (now, schedule["id"])
+#                 )
+
+#                 if freq == "once":
+#                     cur.execute(
+#                         "UPDATE report_schedules SET is_active=0 WHERE id=%s",
+#                         (schedule["id"],)
+#                     )
+
+#                 conn.commit()
+#                 print(" Mail sent successfully")
+
+#         except Exception as e:
+#             print(" Schedule Error:", e)
+
+#     cur.close()
+#     conn.close()
+
 def process_company_schedules(company_db_name):
     conn = get_company_db(company_db_name)
     cur = conn.cursor(dictionary=True)
@@ -73,6 +250,7 @@ def process_company_schedules(company_db_name):
     current_time = now.time().replace(second=0, microsecond=0)
     current_day = now.strftime("%A")  # Monday, Tuesday...
 
+    # --- active schedules ---
     cur.execute("""
         SELECT *
         FROM report_schedules
@@ -82,96 +260,88 @@ def process_company_schedules(company_db_name):
 
     for schedule in schedules:
         try:
+            # -------------------------------------------------
+            # 1️⃣ Schedule time handling
+            # -------------------------------------------------
             schedule_time_raw = schedule["schedule_time"]
 
-# 🛠 MySQL TIME → python conversion fix
+            # MySQL TIME → python time
             if isinstance(schedule_time_raw, timedelta):
-                schedule_time = (
-                datetime.min + schedule_time_raw
-                ).time()
+                schedule_time = (datetime.min + schedule_time_raw).time()
             else:
                 schedule_time = schedule_time_raw
 
             scheduled_dt = datetime.combine(today, schedule_time)
             current_dt = datetime.combine(today, current_time)
 
-# ⏱ ±60 sec tolerance
-            if abs((scheduled_dt - current_dt).total_seconds()) > 60:
+            # ⏱ tolerance (safe)
+            if abs((scheduled_dt - current_dt).total_seconds()) > 30:
                 continue
 
+            # -------------------------------------------------
+            # 2️⃣ Duplicate protection (minute-level lock)
+            # -------------------------------------------------
+            if schedule["last_run"]:
+                last_run_min = schedule["last_run"].replace(second=0, microsecond=0)
+                if last_run_min == current_dt:
+                    continue
 
-            #  duplicate protection
-            if schedule["last_run"] and schedule["last_run"].date() == today:
-                continue
-
+            # -------------------------------------------------
+            # 3️⃣ Frequency check
+            # -------------------------------------------------
             freq = schedule["frequency"].lower()
             selected_days = (schedule.get("selected_days") or "").split(",")
 
-            should_send = False
-
-            if freq == "once":
-                should_send = True
-            elif freq == "daily":
-                should_send = True
-            elif freq == "weekly" and current_day in selected_days:
-                should_send = True
-            elif freq == "monthly" and now.day == schedule["created_at"].day:
-                should_send = True
-            elif freq == "yearly" and (
-                now.day == schedule["created_at"].day and
-                now.month == schedule["created_at"].month
-            ):
-                should_send = True
+            should_send = (
+                freq == "once" or
+                freq == "daily" or
+                (freq == "weekly" and current_day in selected_days) or
+                (freq == "monthly" and now.day == schedule["created_at"].day) or
+                (freq == "yearly" and
+                 now.day == schedule["created_at"].day and
+                 now.month == schedule["created_at"].month)
+            )
 
             if not should_send:
                 continue
 
             print(
-                f" Generating report {schedule['report_id']} "
+                f"📄 Generating report {schedule['report_id']} "
                 f"for company DB {company_db_name}"
             )
 
-            # 1️ report payload আনো
-            cur.execute("""
-    SELECT report_config
-    FROM saved_reports
-    WHERE report_id=%s
-      AND session_id=%s
-    LIMIT 1
-            """, (schedule["report_id"], schedule["user_session_id"]))
+            # -------------------------------------------------
+            # 4️⃣ Build FINAL payload (saved_reports + query_history)
+            # -------------------------------------------------
+            payload = build_report_payload(cur, schedule)
 
-            row = cur.fetchone()
-            if not row:
-                raise Exception("Report config not found")
-
-            # payload = row["report_config"]
-            payload = (
-                row["report_config"]
-                if isinstance(row["report_config"], dict)
-                else json.loads(row["report_config"])
+            # -------------------------------------------------
+            # 5️⃣ Lock BEFORE heavy operations (important)
+            # -------------------------------------------------
+            cur.execute(
+                "UPDATE report_schedules SET last_run=%s WHERE id=%s",
+                (now, schedule["id"])
             )
+            conn.commit()
 
-
-# 2️ PDF generate করো (CORRECT CALL)
+            # -------------------------------------------------
+            # 6️⃣ Generate PDF
+            # -------------------------------------------------
             filename = generate_report_pdf(
                 session_id=schedule["user_session_id"],
                 payload=payload,
                 company_db=conn
             )
 
-# generate_report_pdf returns filename only
-            pdf_buffer = open(
-                os.path.join("uploads", "reportpdf", filename),
-                "rb"
-            )
+            pdf_path = os.path.join("uploads", "reportpdf", filename)
+            pdf_buffer = open(pdf_path, "rb")
 
-
+            # -------------------------------------------------
+            # 7️⃣ Send Mail
+            # -------------------------------------------------
             if send_automated_email(schedule, pdf_buffer, filename):
-                cur.execute(
-                    "UPDATE report_schedules SET last_run=%s WHERE id=%s",
-                    (now, schedule["id"])
-                )
 
+                # once → deactivate
                 if freq == "once":
                     cur.execute(
                         "UPDATE report_schedules SET is_active=0 WHERE id=%s",
@@ -179,15 +349,15 @@ def process_company_schedules(company_db_name):
                     )
 
                 conn.commit()
-                print(" Mail sent successfully")
+                print("✅ Mail sent successfully:", filename)
+
+            pdf_buffer.close()
 
         except Exception as e:
-            print(" Schedule Error:", e)
+            print("❌ Schedule Error:", e)
 
     cur.close()
     conn.close()
-
-
 # -------------------------------------------------
 # MAIN SCHEDULER JOB (DYNAMIC COMPANY RESOLUTION)
 # -------------------------------------------------

@@ -337,7 +337,14 @@ def generate_report_pdf(session_id, payload, company_db):
         elements.extend([line_table, Spacer(1, 20)])
 
         # --- Charts ---
-        chart_list = payload.get("chart", [])
+        # chart_list = payload.get("chart", [])
+        chart_list = []
+
+
+        if isinstance(payload.get("charts"), list) and payload.get("charts"):
+           chart_list = payload.get("charts")
+        elif isinstance(payload.get("chart"), list) and payload.get("chart"):
+           chart_list = payload.get("chart")
         chart_images = []
         for c in chart_list:
             c_buf = generate_backend_chart(c)
