@@ -68,39 +68,160 @@ def build_report_payload(cur, schedule):
 # -------------------------------------------------
 # MAIL SENDER
 # -------------------------------------------------
-def send_automated_email(schedule, pdf_buffer, filename):
+# def send_automated_email(schedule, pdf_buffer, filename):
+#     try:
+#         sender_email = "sahajinsightssoluation@gmail.com"
+#         sender_password = "fjcy vars xpzq nuat"  # Gmail App Password
+
+#         msg = MIMEMultipart()
+#         msg["From"] = f"InsightGrid Reports <{sender_email}>"
+
+#         to_list = json.loads(schedule["recipient_to"])
+#         cc_list = json.loads(schedule.get("recipient_cc") or "[]")
+
+#         msg["To"] = ", ".join(to_list)
+#         if cc_list:
+#             msg["Cc"] = ", ".join(cc_list)
+
+#         msg["Subject"] = schedule["mail_title"]
+#         msg.attach(
+#             MIMEText(
+#                 schedule.get("mail_body") or "Please find the attached report.",
+#                 "plain"
+#             )
+#         )
+
+#         part = MIMEBase("application", "octet-stream")
+#         part.set_payload(pdf_buffer.read())
+#         encoders.encode_base64(part)
+#         part.add_header(
+#             "Content-Disposition",
+#             f"attachment; filename={filename}"
+#         )
+#         msg.attach(part)
+
+#         all_recipients = to_list + cc_list
+
+#         with smtplib.SMTP("smtp.gmail.com", 587) as server:
+#             server.starttls()
+#             server.login(sender_email, sender_password)
+#             server.sendmail(sender_email, all_recipients, msg.as_string())
+
+#         return True
+
+#     except Exception as e:
+#         print(" Mail Error:", e)
+#         return False
+
+def send_automated_email(schedule, pdf_buffer, filename, company_name):
     try:
         sender_email = "sahajinsightssoluation@gmail.com"
-        sender_password = "fjcy vars xpzq nuat"  # Gmail App Password
-
-        msg = MIMEMultipart()
-        msg["From"] = f"InsightGrid Reports <{sender_email}>"
+        sender_password = "fjcy vars xpzq nuat"
 
         to_list = json.loads(schedule["recipient_to"])
         cc_list = json.loads(schedule.get("recipient_cc") or "[]")
+        all_recipients = to_list + cc_list
 
+        subject = "Scheduled Data Report – Sahajinsight"
+        today_str = datetime.now().strftime("%d %b %Y")
+
+        # ---------------- HTML BODY ----------------
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color:#f4f6f8; padding:20px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td align="center">
+                <table width="600" style="background:#ffffff; padding:25px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                  
+                  <tr>
+                    <td style="font-size:20px; font-weight:bold; color:#2c3e50;">
+                      📊 Scheduled Data Report
+                    </td>
+                  </tr>
+
+                  <tr><td style="height:15px;"></td></tr>
+
+                  <tr>
+                    <td style="font-size:14px; color:#333;">
+                      Dear Team,<br><br>
+                      Please find attached the scheduled data report generated automatically by
+                      <b style="color:#0b5ed7;">Sahajinsight</b>.
+                    </td>
+                  </tr>
+
+                  <tr><td style="height:20px;"></td></tr>
+
+                  <tr>
+                    <td>
+                      <table width="100%" style="border:1px solid #e0e0e0; border-radius:6px;">
+                        <tr style="background:#f1f5ff;">
+                          <td colspan="2" style="padding:10px; font-weight:bold; color:#0b5ed7;">
+                            Report Details
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:8px; font-weight:bold;">Company</td>
+                          <td style="padding:8px;">{company_name}</td>
+                        </tr>
+                        <tr style="background:#fafafa;">
+                          <td style="padding:8px; font-weight:bold;">Report ID</td>
+                          <td style="padding:8px;">{schedule.get("report_id")}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:8px; font-weight:bold;">Generated On</td>
+                          <td style="padding:8px;">{today_str}</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <tr><td style="height:20px;"></td></tr>
+
+                  <tr>
+                    <td style="font-size:13px; color:#555;">
+                      This report is <b>system-generated</b> and does not require any manual action.
+                      <br><br>
+                      For any questions or changes related to scheduling or report configuration,
+                      please contact the system administrator.
+                    </td>
+                  </tr>
+
+                  <tr><td style="height:25px;"></td></tr>
+
+                  <tr>
+                    <td style="font-size:12px; color:#888; border-top:1px solid #eaeaea; padding-top:10px;">
+                      Regards,<br>
+                      <b>Sahajinsight Reporting System</b><br>
+                      <span style="font-style:italic;">This is an automated email – please do not reply</span>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """
+
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"Sahajinsight Reports <{sender_email}>"
         msg["To"] = ", ".join(to_list)
         if cc_list:
             msg["Cc"] = ", ".join(cc_list)
+        msg["Subject"] = subject
 
-        msg["Subject"] = schedule["mail_title"]
-        msg.attach(
-            MIMEText(
-                schedule.get("mail_body") or "Please find the attached report.",
-                "plain"
-            )
-        )
+        msg.attach(MIMEText(html_body, "html"))
 
-        part = MIMEBase("application", "octet-stream")
+        part = MIMEBase("application", "pdf")
         part.set_payload(pdf_buffer.read())
         encoders.encode_base64(part)
         part.add_header(
             "Content-Disposition",
-            f"attachment; filename={filename}"
+            f'attachment; filename="{filename}"'
         )
         msg.attach(part)
-
-        all_recipients = to_list + cc_list
 
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
@@ -110,137 +231,11 @@ def send_automated_email(schedule, pdf_buffer, filename):
         return True
 
     except Exception as e:
-        print(" Mail Error:", e)
+        print("❌ Mail Error:", e)
         return False
-
-
 # -------------------------------------------------
 # PROCESS ONE COMPANY DB
 # -------------------------------------------------
-# def process_company_schedules(company_db_name):
-#     conn = get_company_db(company_db_name)
-#     cur = conn.cursor(dictionary=True)
-
-#     now = datetime.now()
-#     today = now.date()
-#     current_time = now.time().replace(second=0, microsecond=0)
-#     current_day = now.strftime("%A")  # Monday, Tuesday...
-
-#     cur.execute("""
-#         SELECT *
-#         FROM report_schedules
-#         WHERE is_active = 1
-#     """)
-#     schedules = cur.fetchall()
-
-#     for schedule in schedules:
-#         try:
-#             schedule_time_raw = schedule["schedule_time"]
-
-# # 🛠 MySQL TIME → python conversion fix
-#             if isinstance(schedule_time_raw, timedelta):
-#                 schedule_time = (
-#                 datetime.min + schedule_time_raw
-#                 ).time()
-#             else:
-#                 schedule_time = schedule_time_raw
-
-#             scheduled_dt = datetime.combine(today, schedule_time)
-#             current_dt = datetime.combine(today, current_time)
-
-# # ⏱ ±60 sec tolerance
-#             if abs((scheduled_dt - current_dt).total_seconds()) > 60:
-#                 continue
-
-
-#             #  duplicate protection
-#             if schedule["last_run"] and schedule["last_run"].date() == today:
-#                 continue
-
-#             freq = schedule["frequency"].lower()
-#             selected_days = (schedule.get("selected_days") or "").split(",")
-
-#             should_send = False
-
-#             if freq == "once":
-#                 should_send = True
-#             elif freq == "daily":
-#                 should_send = True
-#             elif freq == "weekly" and current_day in selected_days:
-#                 should_send = True
-#             elif freq == "monthly" and now.day == schedule["created_at"].day:
-#                 should_send = True
-#             elif freq == "yearly" and (
-#                 now.day == schedule["created_at"].day and
-#                 now.month == schedule["created_at"].month
-#             ):
-#                 should_send = True
-
-#             if not should_send:
-#                 continue
-
-#             print(
-#                 f" Generating report {schedule['report_id']} "
-#                 f"for company DB {company_db_name}"
-#             )
-
-#             # 1️ report payload আনো
-#             cur.execute("""
-#     SELECT report_config
-#     FROM saved_reports
-#     WHERE report_id=%s
-#       AND session_id=%s
-#     LIMIT 1
-#             """, (schedule["report_id"], schedule["user_session_id"]))
-
-#             row = cur.fetchone()
-#             if not row:
-#                 raise Exception("Report config not found")
-
-#             # payload = row["report_config"]
-#             # payload = (
-#             #     row["report_config"]
-#             #     if isinstance(row["report_config"], dict)
-#             #     else json.loads(row["report_config"])
-#             # )
-#             payload = build_report_payload(cur, schedule)
-
-
-# # 2️ PDF generate করো (CORRECT CALL)
-#             filename = generate_report_pdf(
-#                 session_id=schedule["user_session_id"],
-#                 payload=payload,
-#                 company_db=conn
-#             )
-
-# # generate_report_pdf returns filename only
-#             pdf_buffer = open(
-#                 os.path.join("uploads", "reportpdf", filename),
-#                 "rb"
-#             )
-
-
-#             if send_automated_email(schedule, pdf_buffer, filename):
-#                 cur.execute(
-#                     "UPDATE report_schedules SET last_run=%s WHERE id=%s",
-#                     (now, schedule["id"])
-#                 )
-
-#                 if freq == "once":
-#                     cur.execute(
-#                         "UPDATE report_schedules SET is_active=0 WHERE id=%s",
-#                         (schedule["id"],)
-#                     )
-
-#                 conn.commit()
-#                 print(" Mail sent successfully")
-
-#         except Exception as e:
-#             print(" Schedule Error:", e)
-
-#     cur.close()
-#     conn.close()
-
 def process_company_schedules(company_db_name):
     conn = get_company_db(company_db_name)
     cur = conn.cursor(dictionary=True)
@@ -370,7 +365,7 @@ def scheduler_job():
     m_cur = m_conn.cursor(dictionary=True)
 
     m_cur.execute("""
-        SELECT company_db_name
+        SELECT company_db_name, comapny_name
         FROM companies
         WHERE is_active = 1 AND is_deleted = 0
     """)
