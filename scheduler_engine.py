@@ -10,6 +10,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from database.dbConnection import get_master_db, get_company_db
 from helper.pdf_generator import generate_report_pdf
+from dotenv import load_dotenv
+load_dotenv()
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 465))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
 def build_report_payload(cur, schedule):
     """
@@ -18,7 +24,7 @@ def build_report_payload(cur, schedule):
     2. query_history.executable_sql
     """
 
-    # ---------- 1️⃣ saved_reports ----------
+    # ---------- 1️ saved_reports ----------
     cur.execute("""
         SELECT report_config
         FROM saved_reports
@@ -37,7 +43,7 @@ def build_report_payload(cur, schedule):
         else json.loads(sr["report_config"])
     )
 
-    # ---------- 2️⃣ query_history (LATEST SUCCESS QUERY) ----------
+    # ---------- 2️ query_history (LATEST SUCCESS QUERY) ----------
     cur.execute("""
         SELECT executable_sql, table_names
         FROM query_history
@@ -53,10 +59,10 @@ def build_report_payload(cur, schedule):
     if not qh or not qh.get("executable_sql"):
         raise Exception("Executable SQL not found in query_history")
 
-    # ---------- 3️⃣ FINAL PAYLOAD ----------
+    # ---------- 3️ FINAL PAYLOAD ----------
     payload = {
         "report_title": base_payload.get("report_title", "Scheduled Report"),
-        "query": qh["executable_sql"],          # 🔥 MOST IMPORTANT
+        "query": qh["executable_sql"],          #  MOST IMPORTANT
         "charts": base_payload.get("charts", []),
         "filters": base_payload.get("filters", []),
         "group_by": base_payload.get("group_by", []),
@@ -67,11 +73,9 @@ def build_report_payload(cur, schedule):
     return payload
 # -------------------------------------------------
 # MAIL SENDER
-
-def send_automated_email(schedule, pdf_buffer, filename, company_name,report_name):
+def send_automated_email(schedule, pdf_buffer, filename, company_name, report_name):
     try:
-        sender_email = "sahajinsightssoluation@gmail.com"
-        sender_password = "fjcy vars xpzq nuat"
+        sender_email = SMTP_USER
 
         to_list = json.loads(schedule["recipient_to"])
         cc_list = json.loads(schedule.get("recipient_cc") or "[]")
@@ -80,91 +84,90 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name,report_nam
         subject = "Scheduled Data Report – Sahajinsight"
         today_str = datetime.now().strftime("%d %b %Y")
 
-        # ---------------- HTML BODY ----------------
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; background-color:#f4f6f8; padding:20px;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td align="center">
-                <table width="600" style="background:#ffffff; padding:25px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                  
-                  <tr>
-                    <td style="font-size:20px; font-weight:bold; color:#2c3e50;">
-                      📊 Scheduled Data Report
-                    </td>
-                  </tr>
-
-                  <tr><td style="height:15px;"></td></tr>
-
-                  <tr>
-                    <td style="font-size:14px; color:#333;">
-                      Dear Team,<br><br>
-                      Please find attached the scheduled data report generated automatically by
-                      <b style="color:#0b5ed7;">Sahajinsight</b>.
-                    </td>
-                  </tr>
-
-                  <tr><td style="height:20px;"></td></tr>
-
-                  <tr>
-                    <td>
-                      <table width="100%" style="border:1px solid #e0e0e0; border-radius:6px;">
-                        <tr style="background:#f1f5ff;">
-                          <td colspan="2" style="padding:10px; font-weight:bold; color:#0b5ed7;">
-                            Report Details
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style="padding:8px; font-weight:bold;">Company</td>
-                          <td style="padding:8px;">{company_name}</td>
-                        </tr>
-                        <tr style="background:#fafafa;">
-                            <td style="padding:8px; font-weight:bold;">Report Name</td>
-                            <td style="padding:8px;">{report_name}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding:8px; font-weight:bold;">Generated On</td>
-                          <td style="padding:8px;">{today_str}</td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-
-                  <tr><td style="height:20px;"></td></tr>
-                  <tr>
-                    <td style="font-size:13px; color:#555;">
-                      This report is <b>system-generated</b> and does not require any manual action.
-                      <br><br>
-                      For any questions or changes related to scheduling or report configuration,
-                      please contact the system administrator.
-                    </td>
-                  </tr>
-
-                  <tr><td style="height:25px;"></td></tr>
-
-                  <tr>
-                    <td style="font-size:12px; color:#888; border-top:1px solid #eaeaea; padding-top:10px;">
-                      Regards,<br>
-                      <b>Sahajinsight Reporting System</b><br>
-                      <span style="font-style:italic;">This is an automated email – please do not reply</span>
-                    </td>
-                  </tr>
-
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-        """
-
         msg = MIMEMultipart("alternative")
         msg["From"] = f"Sahajinsight Reports <{sender_email}>"
         msg["To"] = ", ".join(to_list)
         if cc_list:
             msg["Cc"] = ", ".join(cc_list)
         msg["Subject"] = subject
+
+        html_body = f"""
+         <html>
+         <body style="font-family: Arial, sans-serif; background-color:#f4f6f8; padding:20px;">
+           <table width="100%" cellpadding="0" cellspacing="0">
+             <tr>
+               <td align="center">
+                <table width="600" style="background:#ffffff; padding:25px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                  
+                   <tr>
+                     <td style="font-size:20px; font-weight:bold; color:#2c3e50;">
+                       📊 Scheduled Data Report
+                     </td>
+                   </tr>
+
+                   <tr><td style="height:15px;"></td></tr>
+
+                   <tr>
+                     <td style="font-size:14px; color:#333;">
+                       Dear Team,<br><br>
+                       Please find attached the scheduled data report generated automatically by
+                       <b style="color:#0b5ed7;">Sahajinsight</b>.
+                     </td>
+                   </tr>
+
+                   <tr><td style="height:20px;"></td></tr>
+
+                   <tr>
+                     <td>
+                       <table width="100%" style="border:1px solid #e0e0e0; border-radius:6px;">
+                         <tr style="background:#f1f5ff;">
+                           <td colspan="2" style="padding:10px; font-weight:bold; color:#0b5ed7;">
+                             Report Details
+                           </td>
+                         </tr>
+                         <tr>
+                           <td style="padding:8px; font-weight:bold;">Company</td>
+                           <td style="padding:8px;">{company_name}</td>
+                         </tr>
+                         <tr style="background:#fafafa;">
+                             <td style="padding:8px; font-weight:bold;">Report Name</td>
+                             <td style="padding:8px;">{report_name}</td>
+                         </tr>
+                         <tr>
+                           <td style="padding:8px; font-weight:bold;">Generated On</td>
+                           <td style="padding:8px;">{today_str}</td>
+                         </tr>
+                       </table>
+                     </td>
+                   </tr>
+
+                   <tr><td style="height:20px;"></td></tr>
+                   <tr>
+                     <td style="font-size:13px; color:#555;">
+                       This report is <b>system-generated</b> and does not require any manual action.
+                       <br><br>
+                       For any questions or changes related to scheduling or report configuration,
+                       please contact the system administrator.
+                     </td>
+                   </tr>
+
+                   <tr><td style="height:25px;"></td></tr>
+
+                   <tr>
+                    <td style="font-size:12px; color:#888; border-top:1px solid #eaeaea; padding-top:10px;">
+                       Regards,<br>
+                       <b>Sahajinsight Reporting System</b><br>
+                       <span style="font-style:italic;">This is an automated email – please do not reply</span>
+                     </td>
+                   </tr>
+
+                 </table>
+               </td>
+             </tr>
+           </table>
+         </body>
+         </html>
+        """
 
         msg.attach(MIMEText(html_body, "html"))
 
@@ -177,17 +180,22 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name,report_nam
         )
         msg.attach(part)
 
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, all_recipients, msg.as_string())
+        #  SMTP SSL
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(
+                msg,
+                from_addr=SMTP_USER,
+                to_addrs=all_recipients
+            )
 
         return True
 
     except Exception as e:
         print("Mail Error:", e)
         return False
-    
+
+ 
 def get_report_name_by_id(cur, report_id, session_id):
     cur.execute("""
         SELECT report_name
@@ -269,12 +277,14 @@ def process_company_schedules(company_db_name,company_name):
             # -------------------------------------------------
             # Build FINAL payload (saved_reports + query_history)
             # -------------------------------------------------
-            payload = build_report_payload(cur, schedule)
             report_name = get_report_name_by_id(
                 cur,
                 schedule["report_id"],
                 schedule["user_session_id"]
             )
+            payload = build_report_payload(cur, schedule)
+            payload["report_title"] = report_name
+
             # -------------------------------------------------
             #Lock BEFORE heavy operations (important)
             # -------------------------------------------------
@@ -292,9 +302,28 @@ def process_company_schedules(company_db_name,company_name):
                 payload=payload,
                 company_db=conn
             )
+           # Generate safe report name
+            safe_report_name = (
+                report_name
+                .strip()
+                .replace(" ", "_")
+                .replace("/", "-")
+            )
 
-            pdf_path = os.path.join("uploads", "reportpdf", filename)
-            pdf_buffer = open(pdf_path, "rb")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            new_filename = f"{safe_report_name}_{timestamp}.pdf"
+
+            old_path = os.path.join("uploads", "reportpdf", filename)
+            new_path = os.path.join("uploads", "reportpdf", new_filename)
+
+            if os.path.exists(old_path):
+                os.rename(old_path, new_path)
+
+            filename = new_filename            # ✅ FINAL filename
+            pdf_buffer = open(new_path, "rb")  # ✅ OPEN renamed file
+
+            # pdf_path = os.path.join("uploads", "reportpdf", filename)
+            # pdf_buffer = open(pdf_path, "rb")
 
             # -------------------------------------------------
             #  Send Mail
