@@ -319,16 +319,26 @@ def process_company_schedules(company_db_name,company_name):
             if os.path.exists(old_path):
                 os.rename(old_path, new_path)
 
-            filename = new_filename            # ✅ FINAL filename
-            pdf_buffer = open(new_path, "rb")  # ✅ OPEN renamed file
-
-            # pdf_path = os.path.join("uploads", "reportpdf", filename)
-            # pdf_buffer = open(pdf_path, "rb")
-
+            filename = new_filename            #  FINAL filename
+            pdf_buffer = open(new_path, "rb")  #  OPEN renamed file
             # -------------------------------------------------
             #  Send Mail
             # -------------------------------------------------
-            if send_automated_email(schedule, pdf_buffer, filename, company_name,report_name):
+            mail_sent = False
+
+            try:
+                mail_sent = send_automated_email(
+                    schedule,
+                    pdf_buffer,
+                    filename,
+                    company_name,
+                    report_name
+                )
+            finally:
+                # 🔥 VERY IMPORTANT: file ALWAYS close
+                pdf_buffer.close()
+
+            if mail_sent:
 
                 # once → deactivate
                 if freq == "once":
@@ -338,9 +348,16 @@ def process_company_schedules(company_db_name,company_name):
                     )
 
                 conn.commit()
-                # print(" Mail sent successfully:", filename)
 
-            pdf_buffer.close()
+                # 🧹 delete PDF ONLY if mail sent
+                try:
+                    if os.path.exists(new_path):
+                        os.remove(new_path)
+                except Exception as e:
+                    print("PDF cleanup failed:", e)
+            else:
+                # optional log
+                print("Mail failed, PDF retained for retry:", new_path)
 
         except Exception as e:
             print(" Schedule Error:", e)
@@ -390,4 +407,3 @@ def start_report_scheduler():
     )
 
     scheduler.start()
-    # print(" Dynamic Report Scheduler Started")
