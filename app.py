@@ -42,7 +42,9 @@ from controller.addressBook import (
 get_address_books_controller,
 create_address_book_controller,
 add_email_to_address_book_controller,
-remove_email_from_address_book_controller
+remove_email_from_address_book_controller,
+remove_address_book_controller
+
 )
 from controller.reportDropdown import (
 get_saved_reports_dropdown_controller
@@ -259,6 +261,11 @@ def reports_dropdown_route():
 @app.route("/report_schedules_list", methods=["POST"])
 def report_schedules_list_route():
     return get_report_schedules_controller()
+
+@app.route("/address_book_remove", methods=["POST"])
+def address_book_remove_route():
+    return remove_address_book_controller()
+
 
 # Run the Flask Server
 if __name__ == "__main__":

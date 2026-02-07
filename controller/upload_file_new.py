@@ -27,7 +27,8 @@ from helper.helperFunctions import (
     format_file_size,
     allowed_file,
     get_upload_folder,
-    make_file_hash
+    make_file_hash,
+    force_insight_string
 )
 from model.llm_client import call_llm
 
@@ -1405,7 +1406,12 @@ def upload_and_insights_new_controller():
                 try:
                     #  use LAST chunk sample only (safe)
                     insights_list = generate_insights_from_llm(df_chunk, file_name)
-                    insights_json = json.dumps(insights_list)
+                    # insights_json = json.dumps(insights_list)
+                    insights_json = json.dumps([
+                    force_insight_string(i)
+                    for i in insights_list
+                    if force_insight_string(i)
+                    ])
                     insight_status = "done"
                 except:
                     insights_json = "[]"

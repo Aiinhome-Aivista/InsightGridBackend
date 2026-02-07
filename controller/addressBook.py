@@ -177,7 +177,7 @@ def remove_email_from_address_book_controller():
             return build_response(False, "Invalid session", 401)
 
         db = g.company_db
-        cursor = db.cursor()
+        cursor = db.cursor(dictionary=True)
 
         if not _validate_session(cursor, created_by, session_id):
             cursor.close()
@@ -187,15 +187,103 @@ def remove_email_from_address_book_controller():
             "sp_remove_email_from_address_book",
             (address_book_id, email)
         )
+
+        result = None
+        for rs in cursor.stored_results():
+            result = rs.fetchone()
+
         db.commit()
         cursor.close()
 
-        return build_response(True, "Email removed successfully", 200)
+        if not result:
+            return build_response(False, "Unexpected response from server", 500)
+
+        # ❌ DELETE BLOCKED
+        if result["can_delete"] == 0:
+            return build_response(
+                False,
+                result["message"],
+                409
+            )
+
+        # ✅ DELETE SUCCESS
+        return build_response(
+            True,
+            result["message"],
+            200,
+            {
+                "can_delete": 1
+            }
+        )
 
     except Exception as e:
         return build_response(
             False,
             "Failed to remove email",
+            500,
+            {"error": str(e)}
+        )
+
+
+def remove_address_book_controller():
+    try:
+        body = request.get_json() or {}
+        address_book_id = body.get("address_book_id")
+        created_by = body.get("created_by")
+        session_id = body.get("session_id")
+
+        if not address_book_id or not created_by or not session_id:
+            return build_response(False, "Missing required fields", 400)
+
+        if not hasattr(g, "company_db"):
+            return build_response(False, "Invalid session", 401)
+
+        db = g.company_db
+        cursor = db.cursor(dictionary=True)
+
+        if not _validate_session(cursor, created_by, session_id):
+            cursor.close()
+            return build_response(False, "Invalid session", 401)
+
+        # 🔥 Call stored procedure
+        cursor.callproc(
+            "sp_remove_address_book",
+            (address_book_id,)
+        )
+
+        result = None
+        for rs in cursor.stored_results():
+            result = rs.fetchone()
+
+        db.commit()
+        cursor.close()
+
+        if not result:
+            return build_response(
+                False,
+                "Unexpected response from server",
+                500
+            )
+
+        # ❌ DELETE BLOCKED
+        if result["can_delete"] == 0:
+            return build_response(
+                False,
+                result["message"],
+                409
+            )
+
+        # ✅ DELETE SUCCESS
+        return build_response(
+            True,
+            result["message"],
+            200
+        )
+
+    except Exception as e:
+        return build_response(
+            False,
+            "Failed to remove address book",
             500,
             {"error": str(e)}
         )

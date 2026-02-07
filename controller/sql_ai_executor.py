@@ -374,9 +374,49 @@ def extract_main_table_from_query(sql):
     match = re.search(r"\bFROM\s+`?(\w+)`?", sql, re.IGNORECASE)
     return match.group(1) if match else None
 
+# def sanitize_group_by(select_sql: str, table_name: str):
+#     if not is_aggregation_query(select_sql):
+#         return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+
+#     col_types = get_column_types(table_name)
+
+#     match = re.search(r"GROUP BY\s+(.*)", select_sql, re.IGNORECASE)
+#     if not match:
+#         return select_sql
+
+#     group_cols = [
+#         c.strip().replace("`", "")
+#         for c in match.group(1).split(",")
+#     ]
+
+#     safe_cols = []
+#     for col in group_cols:
+#         col_name = col.split(".")[-1]
+#         ctype = col_types.get(col_name)
+
+#         if ctype and is_groupby_allowed(col_name, ctype):
+#             safe_cols.append(col)
+
+#     if not safe_cols:
+#         return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+
+#     safe_group = "GROUP BY " + ", ".join(safe_cols)
+#     return re.sub(
+#         r"GROUP BY\s+.*",
+#         safe_group,
+#         select_sql,
+#         flags=re.IGNORECASE
+#     )
+
 def sanitize_group_by(select_sql: str, table_name: str):
+    # If no aggregation, remove GROUP BY
     if not is_aggregation_query(select_sql):
         return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+
+    # If aggregation but no GROUP BY → let MySQL raise error
+    match = re.search(r"\bGROUP BY\b", select_sql, re.IGNORECASE)
+    if not match:
+        return select_sql
 
     col_types = get_column_types(table_name)
 
@@ -390,15 +430,21 @@ def sanitize_group_by(select_sql: str, table_name: str):
     ]
 
     safe_cols = []
+
     for col in group_cols:
         col_name = col.split(".")[-1]
         ctype = col_types.get(col_name)
 
-        if ctype and is_groupby_allowed(col_name, ctype):
+        # ✅ If type unknown → TRUST LLM
+        if not ctype:
+            return select_sql
+
+        if is_groupby_allowed(col_name, ctype):
             safe_cols.append(col)
 
+    # ❌ NEVER remove GROUP BY for aggregation
     if not safe_cols:
-        return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+        return select_sql
 
     safe_group = "GROUP BY " + ", ".join(safe_cols)
     return re.sub(

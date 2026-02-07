@@ -81,7 +81,7 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name, report_na
         cc_list = json.loads(schedule.get("recipient_cc") or "[]")
         all_recipients = to_list + cc_list
 
-        subject = "Scheduled Data Report – Sahajinsight"
+        subject = f"Scheduled Report: {report_name} – {company_name}"
         today_str = datetime.now().strftime("%d %b %Y")
 
         msg = MIMEMultipart("alternative")
@@ -92,82 +92,49 @@ def send_automated_email(schedule, pdf_buffer, filename, company_name, report_na
         msg["Subject"] = subject
 
         html_body = f"""
-         <html>
-         <body style="font-family: Arial, sans-serif; background-color:#f4f6f8; padding:20px;">
-           <table width="100%" cellpadding="0" cellspacing="0">
-             <tr>
-               <td align="center">
-                <table width="600" style="background:#ffffff; padding:25px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                  
-                   <tr>
-                     <td style="font-size:20px; font-weight:bold; color:#2c3e50;">
-                       📊 Scheduled Data Report
-                     </td>
-                   </tr>
+        <html>
+        <body style="font-family: Arial, sans-serif; color:#333; line-height:1.6;">
 
-                   <tr><td style="height:15px;"></td></tr>
+        <p style="font-size:15px;">
+        Dear Team,
+        </p>
 
-                   <tr>
-                     <td style="font-size:14px; color:#333;">
-                       Dear Team,<br><br>
-                       Please find attached the scheduled data report generated automatically by
-                       <b style="color:#0b5ed7;">Sahajinsight</b>.
-                     </td>
-                   </tr>
+        <p style="font-size:14px;">
+        Please find attached the scheduled data report generated automatically by
+        <b>Sahajinsight</b>.
+        </p>
 
-                   <tr><td style="height:20px;"></td></tr>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
 
-                   <tr>
-                     <td>
-                       <table width="100%" style="border:1px solid #e0e0e0; border-radius:6px;">
-                         <tr style="background:#f1f5ff;">
-                           <td colspan="2" style="padding:10px; font-weight:bold; color:#0b5ed7;">
-                             Report Details
-                           </td>
-                         </tr>
-                         <tr>
-                           <td style="padding:8px; font-weight:bold;">Company</td>
-                           <td style="padding:8px;">{company_name}</td>
-                         </tr>
-                         <tr style="background:#fafafa;">
-                             <td style="padding:8px; font-weight:bold;">Report Name</td>
-                             <td style="padding:8px;">{report_name}</td>
-                         </tr>
-                         <tr>
-                           <td style="padding:8px; font-weight:bold;">Generated On</td>
-                           <td style="padding:8px;">{today_str}</td>
-                         </tr>
-                       </table>
-                     </td>
-                   </tr>
+        <p style="font-size:14px;">
+        <b>Company:</b> {company_name}<br>
+        <b>Report Name:</b> {report_name}<br>
+        <b>Generated On:</b> {today_str}
+        </p>
 
-                   <tr><td style="height:20px;"></td></tr>
-                   <tr>
-                     <td style="font-size:13px; color:#555;">
-                       This report is <b>system-generated</b> and does not require any manual action.
-                       <br><br>
-                       For any questions or changes related to scheduling or report configuration,
-                       please contact the system administrator.
-                     </td>
-                   </tr>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
 
-                   <tr><td style="height:25px;"></td></tr>
+        <p style="font-size:13px; color:#555;">
+        This report is <b>system-generated</b> and does not require any manual action.
+        </p>
 
-                   <tr>
-                    <td style="font-size:12px; color:#888; border-top:1px solid #eaeaea; padding-top:10px;">
-                       Regards,<br>
-                       <b>Sahajinsight Reporting System</b><br>
-                       <span style="font-style:italic;">This is an automated email – please do not reply</span>
-                     </td>
-                   </tr>
+        <p style="font-size:13px; color:#555;">
+        For any questions or changes related to scheduling or report configuration,
+        please contact the system administrator.
+        </p>
 
-                 </table>
-               </td>
-             </tr>
-           </table>
-         </body>
-         </html>
+        <br>
+
+        <p style="font-size:13px; color:#777;">
+        Regards,<br>
+        <b>Sahajinsight Reporting System</b><br>
+        <i>This is an automated email – please do not reply</i>
+        </p>
+
+        </body>
+        </html>
         """
+
 
         msg.attach(MIMEText(html_body, "html"))
 

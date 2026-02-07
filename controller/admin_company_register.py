@@ -337,6 +337,8 @@ END
             COUNT(*) AS total_queries
         FROM query_history
         WHERE created_by = p_created_by
+         AND parent_query_id IS NULL
+        AND mode IN ('NEW','EDIT','CONTEXT')
         GROUP BY DATE(created_at)
         ORDER BY query_date;
 

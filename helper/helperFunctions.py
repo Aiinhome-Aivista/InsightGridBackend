@@ -6,6 +6,7 @@ import uuid
 import hashlib
 import base64
 from datetime import datetime, date
+import json
 # ---------- Load Environment Variables ----------
 load_dotenv()
 
@@ -125,6 +126,19 @@ def format_dates_in_rows(rows):
     return rows          
        
 
+def force_insight_string(insight):
+    if isinstance(insight, dict):
+        return insight.get("insight", "").strip()
+    if isinstance(insight, str):
+        # handle "{'insight': '...'}"
+        if insight.strip().startswith("{"):
+            try:
+                obj = json.loads(insight.replace("'", '"'))
+                return obj.get("insight", insight).strip()
+            except:
+                return insight.strip()
+        return insight.strip()
+    return ""
 
 
 
