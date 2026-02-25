@@ -375,9 +375,11 @@ def extract_main_table_from_query(sql):
     return match.group(1) if match else None
 
 def sanitize_group_by(select_sql: str, table_name: str):
-    if not is_aggregation_query(select_sql):
-        return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
-
+    # if not is_aggregation_query(select_sql):
+    #     return re.sub(r"\s+GROUP BY\s+.*", "", select_sql, flags=re.IGNORECASE)
+    #  MINIMAL FIX — aggregation query hole GROUP BY touch korbe na
+    if is_aggregation_query(select_sql):
+        return select_sql
     col_types = get_column_types(table_name)
 
     match = re.search(r"GROUP BY\s+(.*)", select_sql, re.IGNORECASE)
