@@ -72,7 +72,8 @@ def get_full_table_info_controller():
             tbl = t["value"]
 
             c2 = db.cursor(dictionary=True)
-            c2.execute(f"SELECT * FROM `{tbl}`")
+            # c2.execute(f"SELECT * FROM `{tbl}`")
+            c2.execute(f"SELECT * FROM `{tbl}` LIMIT 500")
             rows = c2.fetchall()
             rows = format_dates_in_rows(rows)
             table_data_map[tbl] = rows
