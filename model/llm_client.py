@@ -11,8 +11,11 @@ ACTIVE_LLM = os.getenv("ACTIVE_LLM", "mistral_cloud")              # "gemini", "
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1")            # for Gemini
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
-MISTRAL_API_URL = os.getenv("MISTRAL_API_URL", "http://localhost:11434/api/generate")  # local Ollama
-MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")  # cloud or local model
+MISTRAL_API_URL = os.getenv("MISTRAL_API_URL", "http://localhost:11434/api/generate")  # local Ollama or custom endpoint
+MISTRAL_CLOUD_URL = os.getenv("MISTRAL_CLOUD_URL", "https://api.mistral.ai/v1/chat/completions")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "")  # fallback model name for both
+MISTRAL_MODEL_CLOUD = os.getenv("MISTRAL_MODEL_CLOUD", "mistral-small")
+MISTRAL_MODEL_LOCAL = os.getenv("MISTRAL_MODEL_LOCAL", "mistral:latest")
 
 
 def call_llm(prompt: str) -> str:
@@ -26,13 +29,14 @@ def call_llm(prompt: str) -> str:
 
         #  Mistral Cloud API
         elif ACTIVE_LLM == "mistral_cloud":
-            url = "https://api.mistral.ai/v1/chat/completions"
+            url = MISTRAL_CLOUD_URL
             headers = {
                 "Authorization": f"Bearer {MISTRAL_API_KEY}",
                 "Content-Type": "application/json"
             }
+            model_name = MISTRAL_MODEL or MISTRAL_MODEL_CLOUD or "mistral-small"
             payload = {
-                "model": "mistral-small",
+                "model": model_name,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3
             }
@@ -41,24 +45,19 @@ def call_llm(prompt: str) -> str:
             data = res.json()
             return data["choices"][0]["message"]["content"].strip()
 
-        #  Local Ollama (via localhost)
+        #  Local Ollama / custom API
         elif ACTIVE_LLM == "mistral_local":
-            payload = {"model": "mistral:latest", "prompt": prompt}
-            res = requests.post(MISTRAL_API_URL, json=payload, stream=True)
-
-            # Ollama streams multiple JSON lines (one per token)
-            full_response = ""
-            for line in res.iter_lines():
-                if line:
-                    try:
-                        chunk = line.decode("utf-8")
-                        data = json.loads(chunk)
-                        if "response" in data:
-                            full_response += data["response"]
-                    except Exception:
-                        continue  # Skip malformed lines
-
-            return full_response.strip() if full_response else "[Ollama Error] No response received."
+            model_name = MISTRAL_MODEL or MISTRAL_MODEL_LOCAL or "mistral:latest"
+            payload = {"model": model_name, "prompt": prompt, "stream": False}
+            res = requests.post(MISTRAL_API_URL, json=payload, timeout=60)
+            res.raise_for_status()
+            data = res.json()
+            if isinstance(data, dict):
+                if "response" in data:
+                    return data["response"].strip()
+                if "choices" in data and data["choices"]:
+                    return data["choices"][0].get("text", "").strip()
+            return json.dumps(data)
 
         # Invalid LLM setting
         else:
